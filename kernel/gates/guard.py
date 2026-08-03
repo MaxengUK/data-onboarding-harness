@@ -6,6 +6,8 @@ province plate code). Fixtures must use documented invalid ranges instead —
 see tests/fixtures/README.md.
 """
 
+import csv
+import io
 import os
 import re
 import sys
@@ -31,10 +33,16 @@ MSISDN_PATTERN = re.compile(
 )
 TCKN_PATTERN = re.compile(r'\b[1-9]\d{10}\b')
 VKN_PATTERN = re.compile(r'\b\d{10}\b')
-# A bare 10-digit number is ~1/9 likely to pass the VKN checksum by chance,
-# so it is only evaluated when a vkn/vergi/tax_id label sits nearby.
+# A bare 10-digit number is ~1/9 likely to pass the VKN checksum by chance, so
+# it is only evaluated where a vkn/vergi/tax_id label identifies it — either
+# nearby in the text, or naming its column. One pattern serves both so they
+# cannot drift apart.
 VKN_CONTEXT_PATTERN = re.compile(r'vkn|vergi|tax_id', re.IGNORECASE)
 VKN_CONTEXT_RADIUS = 40
+# In a CSV the label is in the header row and the values are hundreds of lines
+# below it, so the proximity rule can never reach them. These get a
+# column-aware pass instead — see _scan_delimited_vkn.
+DELIMITED_EXTENSIONS = {".csv", ".tsv"}
 # [ \t\-] only (no \s) so this can never span a line break.
 PLATE_PATTERN = re.compile(
     r'\b(0[1-9]|[1-7][0-9]|8[0-1])[ \t\-]*[A-Z]{1,3}[ \t\-]*\d{2,4}\b'
@@ -121,6 +129,53 @@ def _has_vkn_context(content: str, start: int, end: int) -> bool:
     return VKN_CONTEXT_PATTERN.search(window) is not None
 
 
+def _detect_delimiter(header_line: str, suffix: str) -> str:
+    if suffix == ".tsv":
+        return "\t"
+    # tr-TR exports frequently use ';' because ',' is the decimal separator.
+    return ";" if header_line.count(";") > header_line.count(",") else ","
+
+
+def _scan_delimited_vkn(content: str, suffix: str) -> dict[str, str]:
+    """Checksum-valid VKNs sitting in a column whose *header* names one.
+
+    Returns {value: column_name}. Naming the column is the context here, so no
+    proximity requirement applies — that is the whole point, since a header row
+    is arbitrarily far from the values beneath it.
+    """
+    if not content:
+        return {}
+
+    delimiter = _detect_delimiter(content.split("\n", 1)[0], suffix)
+    reader = csv.reader(io.StringIO(content), delimiter=delimiter)
+
+    found: dict[str, str] = {}
+    try:
+        header = next(reader)
+    except (StopIteration, csv.Error):
+        return found
+
+    targets = {
+        idx: name.strip()
+        for idx, name in enumerate(header)
+        if VKN_CONTEXT_PATTERN.search(name)
+    }
+    if not targets:
+        return found
+
+    try:
+        for row in reader:
+            for idx, column_name in targets.items():
+                # Ragged rows are normal in a broken export; just skip short ones.
+                if idx < len(row) and is_authentic_vkn(row[idx].strip()):
+                    found[row[idx].strip()] = column_name
+    except csv.Error:
+        # A malformed export must not take the whole scan down; keep what we have.
+        pass
+
+    return found
+
+
 def scan_file_for_leaks(file_path: Path) -> list[str]:
     content = read_text_safely(file_path)
     if content is None:
@@ -131,7 +186,16 @@ def scan_file_for_leaks(file_path: Path) -> list[str]:
         if is_authentic_tckn(match.group()):
             violations.append(f"Authentic TCKN detected: {match.group()}")
 
+    delimited_vkn: dict[str, str] = {}
+    if file_path.suffix.lower() in DELIMITED_EXTENSIONS:
+        delimited_vkn = _scan_delimited_vkn(content, file_path.suffix.lower())
+        for value, column_name in delimited_vkn.items():
+            violations.append(f"Authentic VKN detected in column '{column_name}': {value}")
+
     for match in VKN_PATTERN.finditer(content):
+        # Already reported by the column-aware pass above; don't say it twice.
+        if match.group() in delimited_vkn:
+            continue
         if _has_vkn_context(content, match.start(), match.end()) and is_authentic_vkn(match.group()):
             violations.append(f"Authentic VKN detected: {match.group()}")
 

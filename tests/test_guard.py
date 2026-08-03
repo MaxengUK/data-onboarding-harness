@@ -87,6 +87,86 @@ def test_vkn_scan_flags_checksum_valid_number_with_context(tmp_path):
     assert any("VKN" in leak for leak in leaks)
 
 
+# --- VKN in delimited files ------------------------------------------------------
+#
+# A CSV header sits hundreds of lines above its values, so the ±40 character
+# proximity rule can never reach them — and CSV is the primary shape a DMS
+# export arrives in. Columns whose header names a VKN are therefore checked
+# regardless of distance.
+
+def _delimited_content(delimiter, headers, value, value_index, filler_rows=50):
+    """Header row, then enough filler to put the value far out of proximity range."""
+    lines = [delimiter.join(headers)]
+    lines.extend([delimiter.join("x" for _ in headers)] * filler_rows)
+    row = ["x"] * len(headers)
+    row[value_index] = value
+    lines.append(delimiter.join(row))
+    return "\n".join(lines) + "\n"
+
+
+def test_vkn_flagged_in_csv_column_far_below_the_header(tmp_path):
+    valid = _find_valid_vkn("123456789")
+    content = _delimited_content(",", ["musteri_adi", "vkn", "tutar"], valid, 1)
+
+    leaky = tmp_path / "dms_export.csv"
+    leaky.write_text(content, encoding="utf-8")
+    assert any("VKN" in leak for leak in scan_file_for_leaks(leaky))
+
+    # Identical bytes as .txt get only the proximity pass, which cannot reach
+    # this far — proving the column-aware path is what catches the CSV case.
+    as_text = tmp_path / "dms_export.txt"
+    as_text.write_text(content, encoding="utf-8")
+    assert not any("VKN" in leak for leak in scan_file_for_leaks(as_text))
+
+
+def test_vkn_flagged_in_tsv_column(tmp_path):
+    valid = _find_valid_vkn("123456789")
+    f = tmp_path / "export.tsv"
+    f.write_text(_delimited_content("\t", ["ad", "vkn"], valid, 1), encoding="utf-8")
+    assert any("VKN" in leak for leak in scan_file_for_leaks(f))
+
+
+def test_vkn_flagged_in_semicolon_delimited_csv(tmp_path):
+    valid = _find_valid_vkn("123456789")
+    f = tmp_path / "export.csv"
+    f.write_text(_delimited_content(";", ["ad", "vkn", "tutar"], valid, 1), encoding="utf-8")
+    assert any("VKN" in leak for leak in scan_file_for_leaks(f))
+
+
+@pytest.mark.parametrize("header", ["vergi_no", "tax_id", "VKN", "vergi kimlik no"])
+def test_vkn_column_header_variants_are_recognised(tmp_path, header):
+    valid = _find_valid_vkn("123456789")
+    f = tmp_path / "export.csv"
+    f.write_text(_delimited_content(",", ["ad", header], valid, 1), encoding="utf-8")
+    assert any("VKN" in leak for leak in scan_file_for_leaks(f))
+
+
+def test_vkn_not_flagged_in_an_unlabelled_column(tmp_path):
+    """Documents the residual limit: an unlabelled column is still missed.
+
+    Checksumming every bare 10-digit number would fire on roughly one in nine
+    of them, so this gap is the deliberate side of that trade.
+    """
+    valid = _find_valid_vkn("123456789")
+    f = tmp_path / "export.csv"
+    f.write_text(_delimited_content(",", ["ad", "musteri_no"], valid, 1), encoding="utf-8")
+    assert not any("VKN" in leak for leak in scan_file_for_leaks(f))
+
+
+def test_vkn_next_to_its_header_is_reported_only_once(tmp_path):
+    valid = _find_valid_vkn("123456789")
+    f = tmp_path / "short.csv"
+    f.write_text(f"vkn,tutar\n{valid},199.90\n", encoding="utf-8")
+    assert len([leak for leak in scan_file_for_leaks(f) if "VKN" in leak]) == 1
+
+
+def test_delimited_scan_survives_ragged_rows(tmp_path):
+    valid = _find_valid_vkn("123456789")
+    f = tmp_path / "ragged.csv"
+    f.write_text(f"ad,vkn,tutar\nsadece_bir_kolon\nx,{valid}\n", encoding="utf-8")
+    assert any("VKN" in leak for leak in scan_file_for_leaks(f))
+
+
 # --- MSISDN --------------------------------------------------------------------
 #
 # The guard now scans *.py too, itself included, so a real-shaped (non-555)
