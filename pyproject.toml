@@ -22,3 +22,7 @@ dev = [
 
 [project.scripts]
 harness = "kernel.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["kernel*", "discovery*", "references*", "schemas*", "packs*"]
