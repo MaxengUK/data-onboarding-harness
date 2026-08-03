@@ -1,12 +1,13 @@
-from typing import Dict, List, Literal, Optional
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
 class SourceBinding(BaseModel):
     kind: Literal["database", "file"]
-    dialect: Optional[str] = None
+    dialect: str | None = None
     connection_ref: str
-    objects: List[str]
+    objects: list[str]
     posture: Literal["replica", "snapshot", "primary"] = "replica"
 
 
@@ -16,7 +17,7 @@ class SourceConfig(BaseModel):
     format: str
     encoding: str = "utf-8"
     locale: str = "tr-TR"
-    column_map: Dict[str, str]
+    column_map: dict[str, str]
 
 
 class BronzeConfig(BaseModel):
@@ -43,7 +44,7 @@ class ArmingConfig(BaseModel):
 class PreflightConfig(BaseModel):
     sample_limit: int = 200
     freshness_window_hours: int = 48
-    row_count_bounds: Dict[str, int] = Field(default_factory=lambda: {"min": 1, "max": 10000000})
+    row_count_bounds: dict[str, int] = Field(default_factory=lambda: {"min": 1, "max": 10000000})
     estimated_run_minutes: int = 45
     arming: ArmingConfig = Field(default_factory=ArmingConfig)
 
@@ -60,10 +61,10 @@ class Manifest(BaseModel):
     canonical_schema: str
     mode: Literal["discover", "execute"] = "execute"
     cadence: Literal["one_shot", "continuous"] = "one_shot"
-    sources: List[SourceConfig]
+    sources: list[SourceConfig]
     bronze: BronzeConfig
     target: TargetConfig
     preflight: PreflightConfig = Field(default_factory=PreflightConfig)
-    packs: List[str] = Field(default_factory=list)
-    external_references: List[str] = Field(default_factory=list)
+    packs: list[str] = Field(default_factory=list)
+    external_references: list[str] = Field(default_factory=list)
     egress: EgressConfig = Field(default_factory=EgressConfig)

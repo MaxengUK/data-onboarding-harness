@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
-from schemas import Manifest, PackManifest, RuleDefinition, EvidenceRecord
+
+from schemas import EvidenceRecord, Manifest, PackManifest, RuleDefinition
 
 SCHEMAS = {
     "manifest.schema.json": Manifest,

@@ -1,5 +1,6 @@
-from typing import List, Optional
+
 from pydantic import BaseModel, Field
+
 
 class PackRuleRef(BaseModel):
     id: str
@@ -8,6 +9,6 @@ class PackRuleRef(BaseModel):
 class PackManifest(BaseModel):
     name: str
     version: str
-    sector: Optional[str] = None
+    sector: str | None = None
     description: str
-    rules: List[PackRuleRef] = Field(default_factory=list)
+    rules: list[PackRuleRef] = Field(default_factory=list)
