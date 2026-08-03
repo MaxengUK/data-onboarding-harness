@@ -35,6 +35,7 @@ Read before any code change in this repository. These are imperative; the rest o
 - Attribute every mutation to exactly one rule id and one transform name.
 - Add new dependencies as adapters under `kernel/adapters/`, never as direct imports inside stage logic.
 - Keep discovery output in `state: proposed`. Nothing you write may promote a rule.
+- Construct test data that must look authentic at runtime; never write it as a literal. The guard scans `.py` too, and a literal will block the very test that needs it.
 
 **Heuristics:**
 
