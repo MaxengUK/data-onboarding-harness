@@ -9,6 +9,7 @@ from kernel.gates.guard import (
     is_authentic_msisdn,
     is_authentic_tckn,
     is_authentic_vkn,
+    main,
     normalize_msisdn,
     scan_file_for_leaks,
 )
@@ -195,3 +196,34 @@ def test_collect_violations_scans_whole_tree_and_skips_excluded_dirs(tmp_path):
 def test_leg1_leak_fixture_passes_guard():
     fixture = Path(__file__).parent / "fixtures" / "leg1_leak_fixture.json"
     assert scan_file_for_leaks(fixture) == []
+
+
+# --- main() exit-code contract --------------------------------------------------------
+#
+# The suite above proves the guard passes on clean input. These two prove it
+# actually *fails* — an end-to-end check that a leak reaches a non-zero exit
+# code, which is the only thing pre-commit and CI act on.
+
+def test_main_returns_1_and_names_the_file_when_a_leak_is_present(tmp_path, capsys):
+    valid = _find_valid_tckn("100000001")
+    (tmp_path / "data").mkdir()
+    leaky = tmp_path / "data" / "customers.csv"
+    leaky.write_text(f"tckn,name\n{valid},Test Kullanici\n", encoding="utf-8")
+
+    exit_code = main(tmp_path)
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "customers.csv" in captured.out
+    assert "TCKN" in captured.out
+
+
+def test_main_returns_0_on_a_clean_tree(tmp_path, capsys):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "notes.md").write_text("no identifiers here\n", encoding="utf-8")
+
+    exit_code = main(tmp_path)
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Guard Passed" in captured.out
