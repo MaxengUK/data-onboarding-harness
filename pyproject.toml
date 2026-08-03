@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data-onboarding-harness"
+version = "0.4.0"
+description = "MAXENG Data Onboarding Harness"
+requires-python = ">=3.12"
+dependencies = [
+    "polars>=0.20.0",
+    "duckdb>=0.10.0",
+    "pydantic>=2.6.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+harness = "kernel.cli:app"
