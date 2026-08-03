@@ -1,0 +1,311 @@
+{
+  "$defs": {
+    "ArmingConfig": {
+      "properties": {
+        "form": {
+          "default": "interactive",
+          "enum": [
+            "interactive",
+            "standing"
+          ],
+          "title": "Form",
+          "type": "string"
+        },
+        "idp_ref": {
+          "default": "client",
+          "title": "Idp Ref",
+          "type": "string"
+        },
+        "ttl_minutes": {
+          "default": 60,
+          "title": "Ttl Minutes",
+          "type": "integer"
+        }
+      },
+      "title": "ArmingConfig",
+      "type": "object"
+    },
+    "BronzeConfig": {
+      "properties": {
+        "location": {
+          "title": "Location",
+          "type": "string"
+        },
+        "partition_by": {
+          "default": "batch_id",
+          "title": "Partition By",
+          "type": "string"
+        },
+        "retention_days": {
+          "description": "Mandatory \u2014 preflight fails if unset",
+          "exclusiveMinimum": 0,
+          "title": "Retention Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "location",
+        "retention_days"
+      ],
+      "title": "BronzeConfig",
+      "type": "object"
+    },
+    "EgressConfig": {
+      "properties": {
+        "evidence_only": {
+          "default": true,
+          "title": "Evidence Only",
+          "type": "boolean"
+        },
+        "k_anonymity_min": {
+          "default": 5,
+          "title": "K Anonymity Min",
+          "type": "integer"
+        }
+      },
+      "title": "EgressConfig",
+      "type": "object"
+    },
+    "PreflightConfig": {
+      "properties": {
+        "sample_limit": {
+          "default": 200,
+          "title": "Sample Limit",
+          "type": "integer"
+        },
+        "freshness_window_hours": {
+          "default": 48,
+          "title": "Freshness Window Hours",
+          "type": "integer"
+        },
+        "row_count_bounds": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Row Count Bounds",
+          "type": "object"
+        },
+        "estimated_run_minutes": {
+          "default": 45,
+          "title": "Estimated Run Minutes",
+          "type": "integer"
+        },
+        "arming": {
+          "$ref": "#/$defs/ArmingConfig"
+        }
+      },
+      "title": "PreflightConfig",
+      "type": "object"
+    },
+    "SourceBinding": {
+      "properties": {
+        "kind": {
+          "enum": [
+            "database",
+            "file"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "dialect": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dialect"
+        },
+        "connection_ref": {
+          "title": "Connection Ref",
+          "type": "string"
+        },
+        "objects": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Objects",
+          "type": "array"
+        },
+        "posture": {
+          "default": "replica",
+          "enum": [
+            "replica",
+            "snapshot",
+            "primary"
+          ],
+          "title": "Posture",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "connection_ref",
+        "objects"
+      ],
+      "title": "SourceBinding",
+      "type": "object"
+    },
+    "SourceConfig": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "binding": {
+          "$ref": "#/$defs/SourceBinding"
+        },
+        "format": {
+          "title": "Format",
+          "type": "string"
+        },
+        "encoding": {
+          "default": "utf-8",
+          "title": "Encoding",
+          "type": "string"
+        },
+        "locale": {
+          "default": "tr-TR",
+          "title": "Locale",
+          "type": "string"
+        },
+        "column_map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Column Map",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "binding",
+        "format",
+        "column_map"
+      ],
+      "title": "SourceConfig",
+      "type": "object"
+    },
+    "TargetConfig": {
+      "properties": {
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "connection_ref": {
+          "title": "Connection Ref",
+          "type": "string"
+        },
+        "canonical": {
+          "title": "Canonical",
+          "type": "string"
+        },
+        "staging": {
+          "title": "Staging",
+          "type": "string"
+        },
+        "quarantine": {
+          "title": "Quarantine",
+          "type": "string"
+        },
+        "retention_days": {
+          "default": 90,
+          "title": "Retention Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "connection_ref",
+        "canonical",
+        "staging",
+        "quarantine"
+      ],
+      "title": "TargetConfig",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "engagement": {
+      "title": "Engagement",
+      "type": "string"
+    },
+    "tenant": {
+      "title": "Tenant",
+      "type": "string"
+    },
+    "sector": {
+      "title": "Sector",
+      "type": "string"
+    },
+    "canonical_schema": {
+      "title": "Canonical Schema",
+      "type": "string"
+    },
+    "mode": {
+      "default": "execute",
+      "enum": [
+        "discover",
+        "execute"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "cadence": {
+      "default": "one_shot",
+      "enum": [
+        "one_shot",
+        "continuous"
+      ],
+      "title": "Cadence",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SourceConfig"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "bronze": {
+      "$ref": "#/$defs/BronzeConfig"
+    },
+    "target": {
+      "$ref": "#/$defs/TargetConfig"
+    },
+    "preflight": {
+      "$ref": "#/$defs/PreflightConfig"
+    },
+    "packs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Packs",
+      "type": "array"
+    },
+    "external_references": {
+      "items": {
+        "type": "string"
+      },
+      "title": "External References",
+      "type": "array"
+    },
+    "egress": {
+      "$ref": "#/$defs/EgressConfig"
+    }
+  },
+  "required": [
+    "engagement",
+    "tenant",
+    "sector",
+    "canonical_schema",
+    "sources",
+    "bronze",
+    "target"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

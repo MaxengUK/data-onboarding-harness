@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "PackRuleRef": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "severity": {
+          "default": "error",
+          "title": "Severity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "PackRuleRef",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    },
+    "sector": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sector"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/PackRuleRef"
+      },
+      "title": "Rules",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name",
+    "version",
+    "description"
+  ],
+  "title": "PackManifest",
+  "type": "object"
+}

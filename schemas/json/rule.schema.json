@@ -1,0 +1,50 @@
+{
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "layer": {
+      "enum": [
+        "L1_structural",
+        "L2_semantic",
+        "L3_cross_entity",
+        "L4_business"
+      ],
+      "title": "Layer",
+      "type": "string"
+    },
+    "severity": {
+      "default": "error",
+      "enum": [
+        "critical",
+        "error",
+        "warning",
+        "info"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "params": {
+      "additionalProperties": true,
+      "title": "Params",
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "description",
+    "layer"
+  ],
+  "title": "RuleDefinition",
+  "type": "object"
+}
