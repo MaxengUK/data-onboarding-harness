@@ -157,9 +157,9 @@ def collect_violations(root: Path = REPO_ROOT) -> dict[Path, list[str]]:
     return results
 
 
-def main() -> int:
+def main(root: Path = REPO_ROOT) -> int:
     print("Running Synthetic-Fixture Guard...")
-    violations = collect_violations()
+    violations = collect_violations(root)
 
     if not violations:
         print("Guard Passed: No authentic PII detected in the tree.")
