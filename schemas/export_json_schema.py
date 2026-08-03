@@ -20,13 +20,22 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from schemas import EvidenceRecord, Manifest, PackManifest, RuleDefinition
+from schemas import (
+    AuditRecord,
+    EvidenceArtifact,
+    Manifest,
+    PackManifest,
+    RuleDefinition,
+)
 
 SCHEMAS = {
     "manifest.schema.json": Manifest,
     "pack.schema.json": PackManifest,
     "rule.schema.json": RuleDefinition,
-    "evidence.schema.json": EvidenceRecord,
+    "evidence.schema.json": EvidenceArtifact,
+    # In-boundary only (§12). Exported here because it is a schema like any
+    # other; that it has a JSON Schema does not make it exportable data.
+    "audit.schema.json": AuditRecord,
 }
 
 OUT_DIR = Path(__file__).resolve().parent / "json"

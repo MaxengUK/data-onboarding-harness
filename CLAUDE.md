@@ -1,10 +1,11 @@
 # CLAUDE.md — MAXENG Data Onboarding Harness
 
 **Repo:** `data-onboarding-harness`
-**Version:** 0.4.0 (draft)
+**Version:** 0.4.1 (draft)
 **Status:** Pre-Gate 0
 **Owner:** MAXENG
 **Changelog:**
+0.4.1 — **B5 — evidence/audit name collision.** §8 and §12 both said "evidence" while describing different artifacts, which made §12's per-record pre-image hash read as a direct contradiction of §8's denial of PII-typed hashes. They were never the same object. Split explicitly: the **evidence artifact** is aggregate, governed by §8, and is the only thing that crosses the boundary; the **audit record** is per-record, holds pre-image hashes, and stays inside it (§12). No keyed hashing or key management is required — the contradiction was nominal. Two further §8 corrections ride along: **field-value hashes are denied outright**, replacing a low-cardinality threshold that measured the wrong quantity (cardinality is a property of the dataset, reversibility a property of the value space), leaving only artifact-level content hashes; and the permitted list now names kernel-owned closed vocabularies explicitly, permitted because MAXENG owns the word list rather than because they are enums.
 0.4.0 — **Bronze is now a core concept** (§4.2, P10): raw input is landed immutably inside the boundary and every downstream stage reads Bronze, never the source. One-shot operation is a single-batch special case of this. Closes the pre-image contradiction, makes the replay guarantee actually achievable, and fixes atomic emit (§6.3), arming modes (§6.2.3), and the Gate 1 signature metric (§13). Adds the GX result-format egress guard (§8) and the OpenRefine boundary rule (§0).
 0.3.0 — added §0 agent operating rules, §6.2 source binding / preflight / arming (the ready gate), and §7.5 predicate and semantic type registries. Preflight is now the pipeline entry point; no run starts without an attributable, digest-bound approval.
 0.2.0 — added the three-layer legal posture (§2.1), principle P9, recipient-side re-identification test (§8.2), external reference licensing modes (§9.6), the access model (§14.1), and the sub-processor register (§17). Driven by research into how the market actually closes the processor-status gap; §16 narrowed accordingly.
@@ -148,7 +149,7 @@ flowchart TB
 
 This is not a storage detail. Four things depend on it:
 
-- **Reversibility becomes real.** A hash verifies a claimed value; it cannot produce one. Bronze holds the actual pre-image, so "show me what this value was before you touched it" has an answer and `reversible: true` on a rule means something. Evidence still exports only the hash (§8).
+- **Reversibility becomes real.** A hash verifies a claimed value; it cannot produce one. Bronze holds the actual pre-image, so "show me what this value was before you touched it" has an answer and `reversible: true` on a rule means something. The hash lives in the in-boundary audit record; the exported evidence artifact carries neither the value nor the hash (§8).
 - **Replay becomes achievable.** Re-reading a live source cannot be deterministic — the source moves. Replaying against a fixed Bronze partition can be. The §12 byte-identical guarantee is only defensible in this shape.
 - **The source is read once.** One pass per batch against client production, then never again — including for re-runs, rule changes, and shadow evaluation. This matters commercially: it is the difference between a tool that loads a client's operational database and one that does not.
 - **Rule changes get a backtest.** A newly confirmed rule can be evaluated against historical Bronze before promotion: *this rule, applied three months ago, would have changed 1,240 records*. Promotion decisions rest on that report rather than on intuition.
@@ -170,6 +171,7 @@ data-onboarding-harness/
 │  ├─ gates/                     # egress_gate.py, llm_gate.py, deid_gate.py
 │  ├─ evidence/                  # emitter + schema-constrained serializer
 │  ├─ adapters/                  # gx.py, soda.py, splink.py, presidio.py
+│  ├─ registries.py              # closed semantic type / transform / predicate registries (§7.5)
 │  └─ cli.py
 ├─ discovery/
 │  ├─ layers/                    # a_structural, b_dependency, c_temporal, d_semantic
@@ -180,7 +182,7 @@ data-onboarding-harness/
 │  ├─ sector/automotive/
 │  └─ sector/energy/
 ├─ references/                   # external reference adapters
-├─ schemas/                      # pydantic + JSON Schema for manifest, pack, evidence
+├─ schemas/                      # pydantic + JSON Schema for manifest, pack, evidence (exported) and audit (in-boundary)
 └─ tests/fixtures/               # SYNTHETIC ONLY — CI fails on any non-synthetic fixture
 ```
 
@@ -425,11 +427,24 @@ Each semantic type declares whether it is PII-typed, which drives the §8 egress
 
 ## 8. Trust boundary and egress
 
+**Scope — which artifact this section governs.** Two artifacts carry run facts, and only one of them is subject to this section:
+
+| Artifact | Grain | Contains | Crosses the boundary |
+|---|---|---|---|
+| **Evidence artifact** (`schemas/evidence.py`) | aggregate | counts, rates, profiles, metrics | **Yes** — this is what §8 governs, and per P5 it is the only export |
+| **Audit record** (`schemas/audit.py`) | per record | pre-image and post-image hashes, rule id, transform name | **No** — client-side only, read by the client, governed by §12 |
+
+Everything below applies to the evidence artifact. The audit record is not a weaker evidence artifact; it is a different object with a different reader, and the egress gate refuses it structurally rather than by policy. Read §12 with the same distinction in mind — a requirement to record a pre-image hash "in evidence" there means the audit record, never the export.
+
 The evidence emitter is **schema-constrained by a serializer allowlist**, not by convention. Anything not on the allowlist raises and fails the run.
 
-**Permitted in evidence:** counts, rates, ratios, durations, timestamps, rule ids, pack versions, kernel version, content hashes, column names, canonical field names, semantic type labels, transform names (from a closed enum), discovery algorithm names, reference registry ids.
+**Permitted in evidence:** counts, rates, ratios, durations, timestamps, rule ids, pack versions, kernel version, **artifact-level** content hashes (of a Bronze partition, manifest, or pack — never of field values), column names, canonical field names, semantic type labels, transform names, discovery algorithm names, reference registry ids, and members of any other kernel-owned closed vocabulary (stage names, rule states, confidence bands). Closed vocabularies are permitted because MAXENG owns the word list and ships it in the release, so no member can ever carry client content — not because they happen to be implemented as enums.
 
-**Denied in evidence:** any source cell value; any row or row fragment; any free text drawn from the source; any hash of a low-cardinality or PII-typed field (rainbow-reconstructable); any distinct-value list except under §8.1.
+**Permitted is not the same as unconditional.** A column name is on the list, but only one the manifest actually declared — otherwise "column name" is a field label wide enough to carry a cell value through.
+
+**Denied in evidence:** any source cell value; any row or row fragment; any free text drawn from the source; **any hash of field values** — a digest is reversible whenever the value space is enumerable, and for real field types it always is (an MSISDN space is ~10⁹, a TCKN ~10¹¹ constrained by a checksum, a date a few tens of thousands), so only artifact-level content hashes are permitted; any distinct-value list except under §8.1.
+
+The earlier form of this rule denied hashes of "low-cardinality or PII-typed" fields, which measured the wrong quantity: how many distinct values a dataset happens to contain says nothing about how large the space those values are drawn from is. A column holding 10,000 distinct MSISDNs clears any plausible cardinality threshold and is still swept in seconds. No threshold on cardinality can make a field hash safe, so there is no threshold — there is no field hash.
 
 **Adapter output is not trusted.** Wrapped libraries emit their own result structures, and some of them include source values by default — Great Expectations validation results carry sample unexpected values unless the result format is constrained. Every adapter under `kernel/adapters/` must configure its wrapped library to the narrowest result format available, and the evidence emitter must still validate the output against the allowlist rather than passing it through. An adapter that hands the emitter a structure it did not construct is the most likely way this boundary gets breached, so the emitter treats adapter output exactly as it treats source data.
 
@@ -561,7 +576,9 @@ Every run emits a **run manifest**: kernel version, resolved pack versions, mani
 
 A run is replayable if and only if the same run manifest, replayed against the same Bronze partitions, reproduces byte-identical output. `tests/` includes a replay assertion that runs twice and diffs. Non-determinism is a build failure, not a warning. Replay reads Bronze, never the source — a live source moves, and a guarantee that depends on it re-reading identically is not a guarantee.
 
-Normalization is reversible because Bronze holds the pre-image. Every applied transform records the pre-image hash in evidence, and the value itself is recoverable from the Bronze partition inside the boundary. The hash proves which value it was; Bronze produces it.
+Normalization is reversible because Bronze holds the pre-image. Every applied transform records the pre-image hash in **the audit record** (`schemas/audit.py`) — the per-record, in-boundary artifact — and the value itself is recoverable from the Bronze partition inside the boundary. The hash proves which value it was; Bronze produces it.
+
+That hash never appears in the exported evidence artifact. Pre-image hashes are taken over PII-typed fields by construction, which §8 denies in anything crossing the boundary; the audit record exists precisely so that P8's "the client can always tell what happened to a record" is satisfied without weakening §8. See the scope table at the head of §8.
 
 ---
 

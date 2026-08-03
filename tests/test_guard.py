@@ -13,37 +13,15 @@ from kernel.gates.guard import (
     normalize_msisdn,
     scan_file_for_leaks,
 )
+from tests.synthetic import find_valid_tckn, find_valid_vkn
 
 # --- checksum-valid generators ------------------------------------------------
 #
-# Both finders below brute-force the missing check digit(s) using this
-# module's own is_authentic_* function. That proves the implementation is
-# internally self-consistent — it accepts the digit it was used to derive
-# and rejects any other — it does NOT independently verify either algorithm
-# against the real TCKN/VKN government specification; no external ground
-# truth is checked here. (For what it's worth, _find_valid_tckn("100000001")
-# happens to reproduce a widely published checksum-valid dummy TCKN used in
-# other tooling, which is some corroboration for the TCKN branch — VKN has
-# no such cross-check.)
-# A literal valid TCKN/VKN is deliberately never written in this file:
-# the guard scans the whole tree including its own tests, and a hardcoded
-# checksum-valid value here would trip it.
+# Shared with the other test modules; see tests/synthetic.py for why these are
+# built at runtime rather than written as literals (§0).
 
-def _find_valid_tckn(prefix9: str) -> str:
-    for check10 in range(10):
-        for check11 in range(10):
-            candidate = f"{prefix9}{check10}{check11}"
-            if is_authentic_tckn(candidate):
-                return candidate
-    raise AssertionError(f"no checksum-valid TCKN found for prefix {prefix9!r}")
-
-
-def _find_valid_vkn(prefix9: str) -> str:
-    for check_digit in range(10):
-        candidate = f"{prefix9}{check_digit}"
-        if is_authentic_vkn(candidate):
-            return candidate
-    raise AssertionError(f"no checksum-valid VKN found for prefix {prefix9!r}")
+_find_valid_tckn = find_valid_tckn
+_find_valid_vkn = find_valid_vkn
 
 
 # --- TCKN ----------------------------------------------------------------------

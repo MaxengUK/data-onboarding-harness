@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SourceBinding(BaseModel):
@@ -52,6 +52,25 @@ class PreflightConfig(BaseModel):
 class EgressConfig(BaseModel):
     evidence_only: bool = True
     k_anonymity_min: int = 5
+
+    @field_validator("evidence_only")
+    @classmethod
+    def reject_non_evidence_egress(cls, value: bool) -> bool:
+        """`evidence_only: false` is a silent bypass of P5, so it is refused.
+
+        The field stays a bool rather than becoming Literal[True] so that a
+        future version supporting a second egress mode can allow it without a
+        schema shape change. Until such a mode exists with its own gate, the
+        only honest behaviour is to fail at load time rather than at the
+        boundary, where "off" would mean the emitter is simply not consulted.
+        """
+        if not value:
+            raise ValueError(
+                "egress.evidence_only=false is not supported in this version: "
+                "evidence is the only export (P5), and there is no second "
+                "egress path for the gate to police"
+            )
+        return value
 
 
 class Manifest(BaseModel):

@@ -1,12 +1,139 @@
 {
   "$defs": {
-    "ValidationViolation": {
+    "BandCount": {
+      "description": "One entry of the \u00a713 `band_distribution` metric.\n\nA list of these rather than a mapping: an open dict would put free-text keys\ninto the artifact, and the gate refuses mappings for exactly that reason.",
       "properties": {
-        "rule_id": {
-          "title": "Rule Id",
+        "band": {
+          "$ref": "#/$defs/ConfidenceBand"
+        },
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "band",
+        "count"
+      ],
+      "title": "BandCount",
+      "type": "object"
+    },
+    "ColumnProfile": {
+      "description": "\u00a79.1 layer A output for one column: statistics and shapes, no values.\n\n`distinct_values` is the \u00a78.1 exception and is populated only when all three\nof its conditions hold. When they do not, `top_shapes` is the answer.",
+      "properties": {
+        "column_name": {
+          "title": "Column Name",
           "type": "string"
         },
-        "row_index": {
+        "canonical_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canonical Field"
+        },
+        "semantic_type": {
+          "$ref": "#/$defs/SemanticType"
+        },
+        "row_count": {
+          "title": "Row Count",
+          "type": "integer"
+        },
+        "null_rate": {
+          "title": "Null Rate",
+          "type": "number"
+        },
+        "cardinality": {
+          "title": "Cardinality",
+          "type": "integer"
+        },
+        "top_shapes": {
+          "items": {
+            "$ref": "#/$defs/ShapeSummary"
+          },
+          "title": "Top Shapes",
+          "type": "array"
+        },
+        "distinct_values": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KAnonymisedValues"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "column_name",
+        "semantic_type",
+        "row_count",
+        "null_rate",
+        "cardinality"
+      ],
+      "title": "ColumnProfile",
+      "type": "object"
+    },
+    "ConfidenceBand": {
+      "description": "The \u00a79.2 confidence bands.",
+      "enum": [
+        "trivial",
+        "money",
+        "ambiguous",
+        "noise"
+      ],
+      "title": "ConfidenceBand",
+      "type": "string"
+    },
+    "KAnonymisedValues": {
+      "description": "A distinct-value list under the \u00a78.1 exception.\n\nAll three conditions must hold; the gate raises if any does not. It does not\nquietly fall back to shapes \u2014 producing the compliant alternative is the\nprofiling stage's job, and a gate that silently substitutes output is a gate\nnobody can reason about.",
+      "properties": {
+        "semantic_type": {
+          "$ref": "#/$defs/SemanticType"
+        },
+        "cardinality": {
+          "title": "Cardinality",
+          "type": "integer"
+        },
+        "values": {
+          "items": {
+            "$ref": "#/$defs/ValueCount"
+          },
+          "title": "Values",
+          "type": "array"
+        }
+      },
+      "required": [
+        "semantic_type",
+        "cardinality",
+        "values"
+      ],
+      "title": "KAnonymisedValues",
+      "type": "object"
+    },
+    "Metrics": {
+      "description": "The \u00a713 metric set, as explicit fields rather than an open dict.",
+      "properties": {
+        "reuse_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reuse Ratio"
+        },
+        "kernel_churn": {
           "anyOf": [
             {
               "type": "integer"
@@ -16,86 +143,263 @@
             }
           ],
           "default": null,
-          "title": "Row Index"
+          "title": "Kernel Churn"
         },
-        "column_name": {
+        "promotions": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "integer"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Column Name"
+          "title": "Promotions"
         },
-        "invalid_value": {
+        "time_to_first_evidence_ms": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "integer"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "title": "Invalid Value"
+          "title": "Time To First Evidence Ms"
         },
-        "message": {
-          "title": "Message",
+        "time_to_signed_ruleset_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Time To Signed Ruleset Ms"
+        },
+        "signature_rate": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signature Rate"
+        },
+        "signed_coverage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signed Coverage"
+        },
+        "band_distribution": {
+          "items": {
+            "$ref": "#/$defs/BandCount"
+          },
+          "title": "Band Distribution",
+          "type": "array"
+        }
+      },
+      "title": "Metrics",
+      "type": "object"
+    },
+    "RuleOutcome": {
+      "description": "What one rule did to a batch, in counts. Never which records.",
+      "properties": {
+        "rule_id": {
+          "title": "Rule Id",
           "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/RuleState"
+        },
+        "evaluated_count": {
+          "title": "Evaluated Count",
+          "type": "integer"
+        },
+        "violation_count": {
+          "title": "Violation Count",
+          "type": "integer"
+        },
+        "hold_rate": {
+          "title": "Hold Rate",
+          "type": "number"
         }
       },
       "required": [
         "rule_id",
-        "message"
+        "state",
+        "evaluated_count",
+        "violation_count",
+        "hold_rate"
       ],
-      "title": "ValidationViolation",
+      "title": "RuleOutcome",
+      "type": "object"
+    },
+    "RuleState": {
+      "description": "The \u00a711 rule lifecycle.",
+      "enum": [
+        "proposed",
+        "confirmed",
+        "enforced",
+        "archived",
+        "deprecated"
+      ],
+      "title": "RuleState",
+      "type": "string"
+    },
+    "SemanticType": {
+      "description": "What a column *means*, independent of what the client called it.",
+      "enum": [
+        "tckn",
+        "vkn",
+        "phone_mobile",
+        "email",
+        "person_name",
+        "address",
+        "vehicle_plate",
+        "chassis_no",
+        "brand",
+        "model",
+        "category",
+        "province_code",
+        "date",
+        "currency_amount",
+        "count",
+        "opaque_key"
+      ],
+      "title": "SemanticType",
+      "type": "string"
+    },
+    "ShapeSummary": {
+      "description": "The \u00a78.1 fallback: how many values look like this, not which they are.",
+      "properties": {
+        "shape": {
+          "title": "Shape",
+          "type": "string"
+        },
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "shape",
+        "count"
+      ],
+      "title": "ShapeSummary",
+      "type": "object"
+    },
+    "StageName": {
+      "description": "The \u00a76 pipeline stages.",
+      "enum": [
+        "preflight",
+        "ingest",
+        "profile",
+        "discover",
+        "map",
+        "normalize",
+        "validate",
+        "resolve",
+        "emit"
+      ],
+      "title": "StageName",
+      "type": "string"
+    },
+    "ValueCount": {
+      "description": "One distinct value and its group count. Only legal inside \u00a78.1.",
+      "properties": {
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "count": {
+          "title": "Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "value",
+        "count"
+      ],
+      "title": "ValueCount",
       "type": "object"
     }
   },
+  "description": "The only artifact that crosses the boundary (P5).\n\nIdentified by an opaque `run_id` and the manifest hash rather than by tenant\nor engagement name: neither is on the \u00a78 allowlist, and the recipient\nalready knows which engagement they are looking at.",
   "properties": {
     "run_id": {
       "title": "Run Id",
       "type": "string"
     },
-    "tenant": {
-      "title": "Tenant",
+    "kernel_version": {
+      "title": "Kernel Version",
       "type": "string"
     },
-    "engagement": {
-      "title": "Engagement",
+    "manifest_hash": {
+      "title": "Manifest Hash",
       "type": "string"
     },
-    "timestamp": {
+    "pack_versions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Pack Versions",
+      "type": "array"
+    },
+    "reference_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reference Ids",
+      "type": "array"
+    },
+    "generated_at": {
       "format": "date-time",
-      "title": "Timestamp",
+      "title": "Generated At",
       "type": "string"
     },
     "stage": {
-      "title": "Stage",
-      "type": "string"
+      "$ref": "#/$defs/StageName"
     },
-    "violations": {
+    "rule_outcomes": {
       "items": {
-        "$ref": "#/$defs/ValidationViolation"
+        "$ref": "#/$defs/RuleOutcome"
       },
-      "title": "Violations",
+      "title": "Rule Outcomes",
+      "type": "array"
+    },
+    "column_profiles": {
+      "items": {
+        "$ref": "#/$defs/ColumnProfile"
+      },
+      "title": "Column Profiles",
       "type": "array"
     },
     "metrics": {
-      "additionalProperties": true,
-      "title": "Metrics",
-      "type": "object"
+      "$ref": "#/$defs/Metrics"
     }
   },
   "required": [
     "run_id",
-    "tenant",
-    "engagement",
+    "kernel_version",
+    "manifest_hash",
+    "generated_at",
     "stage"
   ],
-  "title": "EvidenceRecord",
+  "title": "EvidenceArtifact",
   "type": "object"
 }

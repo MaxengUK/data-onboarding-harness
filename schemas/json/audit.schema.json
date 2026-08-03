@@ -1,0 +1,60 @@
+{
+  "description": "One attributable mutation, per P8: one rule id, one transform name.\n\nHolds the pre-image hash so a value can be verified against the Bronze\npartition that still holds it (\u00a74.2). The hash proves which value it was;\nBronze produces it.",
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "batch_id": {
+      "title": "Batch Id",
+      "type": "string"
+    },
+    "bronze_partition": {
+      "title": "Bronze Partition",
+      "type": "string"
+    },
+    "record_key": {
+      "title": "Record Key",
+      "type": "string"
+    },
+    "column_name": {
+      "title": "Column Name",
+      "type": "string"
+    },
+    "rule_id": {
+      "title": "Rule Id",
+      "type": "string"
+    },
+    "transform_name": {
+      "title": "Transform Name",
+      "type": "string"
+    },
+    "pre_image_hash": {
+      "title": "Pre Image Hash",
+      "type": "string"
+    },
+    "post_image_hash": {
+      "title": "Post Image Hash",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "batch_id",
+    "bronze_partition",
+    "record_key",
+    "column_name",
+    "rule_id",
+    "transform_name",
+    "pre_image_hash",
+    "post_image_hash",
+    "occurred_at"
+  ],
+  "title": "AuditRecord",
+  "type": "object"
+}
