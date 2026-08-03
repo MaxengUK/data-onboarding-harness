@@ -1,9 +1,45 @@
-import sys
+"""Synthetic-fixture guard (CLAUDE.md §0, §5, §8.2).
+
+Scans the tree for values that are not merely PII-*shaped* but checksum- or
+range-*authentic* (a real TCKN/VKN checksum, a real MSISDN block, a real
+province plate code). Fixtures must use documented invalid ranges instead —
+see tests/fixtures/README.md.
+"""
+
+import os
 import re
+import sys
 from pathlib import Path
 
-# Hedef tarama dizini (repo root'undan itibaren)
-FIXTURE_DIR = Path("tests/fixtures")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+EXCLUDED_DIR_NAMES = {
+    ".git", ".venv", "venv", "__pycache__", "node_modules",
+    ".mypy_cache", ".ruff_cache", ".pytest_cache",
+}
+EXCLUDED_DIR_SUFFIXES = (".egg-info",)
+
+TEXT_EXTENSIONS = {
+    ".json", ".yaml", ".yml", ".csv", ".tsv", ".txt", ".md",
+    ".py", ".toml", ".ini", ".cfg", ".sql", ".xml", ".log",
+}
+
+# Optional national prefix (0 / 90 / 0090 / +90), itself optionally followed
+# by a separator, ahead of the 5xx mobile core (e.g. "+90 555 123 45 67").
+MSISDN_PATTERN = re.compile(
+    r'(?<!\d)(?:(?:\+90|0090|90|0)[ \t\-]?)?5\d{2}[ \t\-]?\d{3}[ \t\-]?\d{2}[ \t\-]?\d{2}(?!\d)'
+)
+TCKN_PATTERN = re.compile(r'\b[1-9]\d{10}\b')
+VKN_PATTERN = re.compile(r'\b\d{10}\b')
+# A bare 10-digit number is ~1/9 likely to pass the VKN checksum by chance,
+# so it is only evaluated when a vkn/vergi/tax_id label sits nearby.
+VKN_CONTEXT_PATTERN = re.compile(r'vkn|vergi|tax_id', re.IGNORECASE)
+VKN_CONTEXT_RADIUS = 40
+# [ \t\-] only (no \s) so this can never span a line break.
+PLATE_PATTERN = re.compile(
+    r'\b(0[1-9]|[1-7][0-9]|8[0-1])[ \t\-]*[A-Z]{1,3}[ \t\-]*\d{2,4}\b'
+)
+
 
 def is_authentic_tckn(tckn: str) -> bool:
     """Geçerli bir TCKN algoritmasına uyup uymadığını kontrol eder."""
@@ -16,61 +52,128 @@ def is_authentic_tckn(tckn: str) -> bool:
     check_11 = sum(digits[0:10]) % 10
     return check_10 == digits[9] and check_11 == digits[10]
 
-def is_authentic_msisdn(msisdn: str) -> bool:
+
+def is_authentic_vkn(vkn: str) -> bool:
+    """Vergi Kimlik No checksum (GİB mod-9 / mod-10 algorithm)."""
+    if len(vkn) != 10 or not vkn.isdigit():
+        return False
+    digits = [int(d) for d in vkn]
+    total = 0
+    for i in range(9):
+        tmp = (digits[i] + (9 - i)) % 10
+        if tmp == 0:
+            total += 9
+        else:
+            contrib = (tmp * (2 ** (9 - i))) % 9
+            total += contrib if contrib != 0 else 9
+    check_digit = (10 - (total % 10)) % 10
+    return check_digit == digits[9]
+
+
+def normalize_msisdn(raw: str) -> str:
+    """Strip separators and any national prefix, keeping the 10-digit subscriber number."""
+    digits_only = re.sub(r'\D', '', raw)
+    return digits_only[-10:] if len(digits_only) >= 10 else digits_only
+
+
+def is_authentic_msisdn(raw: str) -> bool:
     """Gerçek bir operatör numarası olup olmadığını kontrol eder."""
-    clean_num = re.sub(r'[\s\-]', '', msisdn)
-    if len(clean_num) != 10 or not clean_num.startswith('5'):
+    core = normalize_msisdn(raw)
+    if len(core) != 10 or not core.startswith('5'):
         return False
-    # 555 sentetik test bloğudur, gerçek kabul edilmez
-    if clean_num.startswith('555'):
-        return False
-    # Diğer 5XX blokları gerçek kabul edilerek bloklanacak
-    return True
+    # 555 sentetik test bloğudur; diğer 5XX blokları gerçek kabul edilerek bloklanır
+    return not core.startswith('555')
+
+
+def _is_binary(raw: bytes) -> bool:
+    return b'\x00' in raw[:8192]
+
+
+def read_text_safely(path: Path) -> str | None:
+    """Best-effort text read: returns None for binary content, never raises on bad encoding."""
+    try:
+        raw = path.read_bytes()
+    except OSError:
+        return None
+    if _is_binary(raw):
+        return None
+    try:
+        return raw.decode('utf-8')
+    except UnicodeDecodeError:
+        return raw.decode('utf-8', errors='replace')
+
+
+def is_excluded_dir(name: str) -> bool:
+    return name in EXCLUDED_DIR_NAMES or any(name.endswith(suf) for suf in EXCLUDED_DIR_SUFFIXES)
+
+
+def iter_scannable_files(root: Path):
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not is_excluded_dir(d)]
+        for filename in filenames:
+            path = Path(dirpath) / filename
+            if path.suffix.lower() in TEXT_EXTENSIONS:
+                yield path
+
+
+def _has_vkn_context(content: str, start: int, end: int) -> bool:
+    window = content[max(0, start - VKN_CONTEXT_RADIUS):end + VKN_CONTEXT_RADIUS]
+    return VKN_CONTEXT_PATTERN.search(window) is not None
+
 
 def scan_file_for_leaks(file_path: Path) -> list[str]:
-    content = file_path.read_text(encoding="utf-8")
+    content = read_text_safely(file_path)
+    if content is None:
+        return []
     violations = []
-    
-    # 11 Haneli Sayılar (TCKN Adayları)
-    for match in re.finditer(r'\b[1-9]\d{10}\b', content):
+
+    for match in TCKN_PATTERN.finditer(content):
         if is_authentic_tckn(match.group()):
             violations.append(f"Authentic TCKN detected: {match.group()}")
-            
-    # 10 Haneli Telefon Numaraları (MSISDN Adayları)
-    for match in re.finditer(r'\b5\d{2}[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}\b', content):
+
+    for match in VKN_PATTERN.finditer(content):
+        if _has_vkn_context(content, match.start(), match.end()) and is_authentic_vkn(match.group()):
+            violations.append(f"Authentic VKN detected: {match.group()}")
+
+    for match in MSISDN_PATTERN.finditer(content):
         if is_authentic_msisdn(match.group()):
             violations.append(f"Authentic MSISDN detected: {match.group()}")
-            
-    # Plaka (Sadece geçerli 01-81 il kodlarını yakalar)
-    for match in re.finditer(r'\b(0[1-9]|[1-7][0-9]|8[0-1])[\s\-]*[A-Z]{1,3}[\s\-]*\d{2,4}\b', content):
-        violations.append(f"Authentic Turkish Plate detected: {match.group()}")
-        
+
+    # Line-by-line so the plate pattern can never match across a line break.
+    for line in content.splitlines():
+        for match in PLATE_PATTERN.finditer(line):
+            violations.append(f"Authentic Turkish Plate detected: {match.group()}")
+
     return violations
 
-def run_guard():
-    if not FIXTURE_DIR.exists():
-        print(f"Skipping guard: {FIXTURE_DIR} not found.")
-        sys.exit(0)
-        
-    has_errors = False
+
+def collect_violations(root: Path = REPO_ROOT) -> dict[Path, list[str]]:
+    """Pure scan: {file: [violation, ...]} for every leak found under root. No I/O side effects."""
+    results = {}
+    for path in iter_scannable_files(root):
+        leaks = scan_file_for_leaks(path)
+        if leaks:
+            results[path] = leaks
+    return results
+
+
+def main() -> int:
     print("Running Synthetic-Fixture Guard...")
-    
-    for filepath in FIXTURE_DIR.rglob("*.*"):
-        if filepath.suffix in [".json", ".yaml", ".csv", ".txt"]:
-            leaks = scan_file_for_leaks(filepath)
-            if leaks:
-                has_errors = True
-                print(f"\n[CRITICAL] Data leakage detected in: {filepath}")
-                for leak in leaks:
-                    print(f"  - {leak}")
-                    
-    if has_errors:
-        print("\nGuard Failed: Authentic PII data must not be committed to the repository!")
-        print("Use synthetic test data (e.g., invalid TCKN checksums, 555 prefix MSISDNs, >81 plate codes).")
-        sys.exit(1)
-    else:
-        print("Guard Passed: No authentic PII detected in fixtures.")
-        sys.exit(0)
+    violations = collect_violations()
+
+    if not violations:
+        print("Guard Passed: No authentic PII detected in the tree.")
+        return 0
+
+    for filepath, leaks in violations.items():
+        print(f"\n[CRITICAL] Data leakage detected in: {filepath}")
+        for leak in leaks:
+            print(f"  - {leak}")
+
+    print("\nGuard Failed: Authentic PII data must not be committed to the repository!")
+    print("Use synthetic test data (e.g., invalid TCKN/VKN checksums, 555-prefix MSISDNs, out-of-range plate codes).")
+    return 1
+
 
 if __name__ == "__main__":
-    run_guard()
+    sys.exit(main())

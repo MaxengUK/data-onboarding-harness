@@ -1,0 +1,9 @@
+{
+  "description": "Leg 1 emitter leak-test seed (CLAUDE.md §8.2) - PII-shaped but synthetic. See tests/fixtures/README.md for the invalid-range convention this file follows.",
+  "customer": {
+    "tckn": "10000000147",
+    "vkn": "1234567890",
+    "customer_msisdn": "+905551234567",
+    "plate": "99 ABC 123"
+  }
+}

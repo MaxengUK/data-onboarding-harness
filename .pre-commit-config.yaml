@@ -1,0 +1,10 @@
+repos:
+  - repo: local
+    hooks:
+      - id: synthetic-fixture-guard
+        name: Synthetic-fixture guard (CLAUDE.md §0, §5, §8.2)
+        description: Blocks commits containing checksum-authentic TCKN/VKN, real MSISDN blocks, or valid-province plates.
+        entry: python -m kernel.gates.guard
+        language: system
+        pass_filenames: false
+        always_run: true
