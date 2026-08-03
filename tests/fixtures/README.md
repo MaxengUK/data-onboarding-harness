@@ -20,7 +20,9 @@ checksum-valid value:
 ## VKN needs a label to be checked at all
 
 A bare 10-digit number is matched by almost anything, so the guard evaluates the
-VKN checksum only where a `vkn`, `vergi`, or `tax_id` label identifies the value.
+VKN checksum only where a label identifies the value. The recognised labels are
+`vkn`, `vergi` (so `vergi_no`, `vergi kimlik no`), `vd_no`, and `tax_id` /
+`tax_no` / `taxno` / `tax no` — matched case-insensitively, anywhere in the name.
 How that label is found depends on the file type:
 
 | File type | How the label is found |
@@ -28,18 +30,27 @@ How that label is found depends on the file type:
 | `.csv`, `.tsv` | The **header row** is parsed and any column whose name matches is checksummed in full, however many rows down the values sit. Delimiter is `\t` for `.tsv`; for `.csv` it is `,` or `;`, whichever the header uses more (tr-TR exports often use `;` because `,` is the decimal separator). |
 | everything else | The label must appear within ~40 characters of the value — which is how it naturally reads in JSON and YAML (`"vkn": "…"`). |
 
-**Convention:** in a CSV/TSV fixture, name the column `vkn` / `vergi_no` /
-`tax_id`. That is what makes detection work at all; a VKN column called something
+**Convention:** in a CSV/TSV fixture, name the column with one of the labels
+above. That is what makes detection work at all; a VKN column called something
 else is invisible to the guard.
 
 ### Known limits
 
 - **An unlabelled column is still missed.** A checksum-valid VKN under a header
-  like `musteri_no` or `vno` passes. Checksumming every bare 10-digit number
-  would fire on roughly one in nine of them, so this is the deliberate side of
-  that trade rather than an oversight.
+  like `musteri_no`, `vno`, or `mukellef` passes — the label list is a fixed set
+  of spellings, not an understanding of what the column means. Checksumming every
+  bare 10-digit number instead would fire on roughly one in nine of them, so this
+  is the deliberate side of that trade rather than an oversight. Widening the list
+  is cheap; do that rather than loosening the checksum requirement.
 - **The first line is assumed to be a header.** A headerless CSV has its first
   data row consumed as one, so a VKN on that row is only caught by the ±40 rule.
+- **The `;` delimiter rule is tr-TR knowledge living in the wrong place.** Turkish
+  DMS exports use `;` because `,` is the decimal separator — that is a locale fact,
+  and per CLAUDE.md §3 the kernel is meant to be client- and locale-agnostic. It
+  sits in `_detect_delimiter` today because the guard runs before any pack is
+  resolved and cannot depend on one. It belongs in `packs/core/tr-core` once packs
+  can be consulted at this stage; treat its presence in `kernel/` as a known debt,
+  not a precedent for adding more locale logic there.
 
 If a new fixture ever trips the guard, the fixture is wrong, not the guard —
 regenerate the value using this table rather than loosening a detection pattern.

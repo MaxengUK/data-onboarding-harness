@@ -133,11 +133,30 @@ def test_vkn_flagged_in_semicolon_delimited_csv(tmp_path):
     assert any("VKN" in leak for leak in scan_file_for_leaks(f))
 
 
-@pytest.mark.parametrize("header", ["vergi_no", "tax_id", "VKN", "vergi kimlik no"])
+@pytest.mark.parametrize("header", [
+    "vergi_no",
+    "vergi kimlik no",
+    "VKN",
+    "vd_no",
+    "tax_id",
+    "tax_no",
+    "tax no",
+    "taxno",
+    "TAX_ID",
+])
 def test_vkn_column_header_variants_are_recognised(tmp_path, header):
     valid = _find_valid_vkn("123456789")
     f = tmp_path / "export.csv"
     f.write_text(_delimited_content(",", ["ad", header], valid, 1), encoding="utf-8")
+    assert any("VKN" in leak for leak in scan_file_for_leaks(f))
+
+
+@pytest.mark.parametrize("label", ["vd_no", "tax_no", "taxno"])
+def test_widened_labels_also_apply_to_the_proximity_path(tmp_path, label):
+    """The label set is shared, so widening it reaches JSON/YAML as well as CSV."""
+    valid = _find_valid_vkn("123456789")
+    f = tmp_path / "customer.json"
+    f.write_text(f'{{"{label}": "{valid}"}}\n', encoding="utf-8")
     assert any("VKN" in leak for leak in scan_file_for_leaks(f))
 
 

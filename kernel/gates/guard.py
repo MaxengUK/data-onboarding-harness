@@ -37,7 +37,7 @@ VKN_PATTERN = re.compile(r'\b\d{10}\b')
 # it is only evaluated where a vkn/vergi/tax_id label identifies it — either
 # nearby in the text, or naming its column. One pattern serves both so they
 # cannot drift apart.
-VKN_CONTEXT_PATTERN = re.compile(r'vkn|vergi|tax_id', re.IGNORECASE)
+VKN_CONTEXT_PATTERN = re.compile(r'vkn|vergi|vd_no|tax[_ ]?(?:id|no)', re.IGNORECASE)
 VKN_CONTEXT_RADIUS = 40
 # In a CSV the label is in the header row and the values are hundreds of lines
 # below it, so the proximity rule can never reach them. These get a
