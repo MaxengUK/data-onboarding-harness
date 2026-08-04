@@ -225,16 +225,13 @@ def test_a_bare_mapping_is_refused():
 def test_audit_record_may_not_cross_the_boundary():
     """The §12 in-boundary artifact is structurally barred from egress."""
     record = AuditRecord(
-        run_id="run-2026-08-03-0001",
-        batch_id="batch-0001",
-        bronze_partition="bronze/batch_id=0001",
+        row_ordinal=41,
         record_key=_digest("record"),
         column_name="customer_ref",
         rule_id="tr-core.phone.msisdn_format",
         transform_name="canonicalize_phone",
         pre_image_hash=_digest(synthetic_local_msisdn()),
         post_image_hash=_digest("post"),
-        occurred_at=FIXED_TIME,
     )
 
     with pytest.raises(EgressViolation, match="in-boundary"):

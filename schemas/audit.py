@@ -21,12 +21,27 @@ fails the run rather than leaking. Deliberately *not* an `EgressModel`.
 
 Stubbed pending BUILD-PLAN item 10 (`normalize`). The type and its boundary are
 fixed now so that stage has somewhere to write; the fields will grow.
+
+**Every field here is per-record.** What is constant across a segment — the run
+id, the Bronze partition — lives on `SegmentRef` in `kernel/audit/segment.py`,
+not on each record. That is not only deduplication: a record that stamps its own
+run id makes the segment's bytes a function of *which run wrote them* rather than
+of *what was written*, and two runs over identical input then produce different
+bytes for identical facts. With run identity held one level up, they do not, and
+a replay's audit store can be diffed against the original byte for byte.
+
+**And no timestamp.** The obvious `occurred_at` was removed rather than kept,
+because a per-record wall-clock read is a per-record source of nondeterminism in
+a store whose whole integrity story is a content hash. Time belongs to the run,
+and the run manifest (§12) records it. P8 is unharmed: a record is reached
+through the segment that names its run, so "when did this happen" is answered one
+indirection away, and answered *once* rather than restated a million times with
+microsecond noise that no reader wants and no replay can reproduce.
 """
 
-from datetime import datetime
 from typing import ClassVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AuditRecord(BaseModel):
@@ -43,13 +58,17 @@ class AuditRecord(BaseModel):
     #: the record exportable, which is the failure this module exists to prevent.
     IN_BOUNDARY_ONLY: ClassVar[bool] = True
 
-    run_id: str
-    batch_id: str
-    bronze_partition: str
+    row_ordinal: int = Field(
+        ge=0,
+        description=(
+            "Position of the source row in its Bronze partition. Segment "
+            "assignment is a pure function of this (§4.2.6), which is what keeps "
+            "segment boundaries independent of worker completion order."
+        ),
+    )
     record_key: str
     column_name: str
     rule_id: str
     transform_name: str
     pre_image_hash: str
     post_image_hash: str
-    occurred_at: datetime
