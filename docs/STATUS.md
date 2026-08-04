@@ -41,10 +41,12 @@ The session's highest-value output. Each was invisible until code forced the que
 
 ## 3. Verification debt — clear at the start of next session
 
-1. **GitHub Actions for `48f09f1` was never checked.** The largest commit of the session (13 files, ~1,650 lines, two new modules). Confirm green and confirm the guard step ran.
+1. ~~**GitHub Actions for `48f09f1` was never checked.**~~ Closed — green, 108/108, and the synthetic-fixture guard step ran rather than being skipped.
 2. ~~**`docs/ROADMAP.md` and `docs/BUILD-PLAN.md` presence has never been verified.**~~ Closed — both are present in `docs/`.
 3. ~~**No LICENSE file.**~~ Closed — proprietary `LICENSE` added at the repo root. MIT and Apache were both rejected: the repo carries `tr-core`, which is the reusable rule asset the whole economic argument in §1 rests on, and a permissive licence would place it in the public domain of every engagement it touches. See §8 for the obligation this leaves open.
-4. **CI has never been checked against a `pytest` run that includes `duckdb`.** `tests/test_bronze.py` imports it to read Parquet row group metadata. It is a declared runtime dependency, so this should be fine, but "should be fine" is what item 1 above is about.
+4. ~~**CI has never been checked against a `pytest` run that includes `duckdb`.**~~ Closed **conditionally**. It is installed and it genuinely runs: `duckdb>=0.10.0` sits in `dependencies` rather than the `dev` extra, so CI's `pip install -e .[dev]` pulls it, and `tests/test_bronze.py` exercises it for real — reading row group layout back out of the written file rather than asserting the pinned constant against itself.
+
+    What stays open is the **declaration, not the test run**: duckdb is declared a *runtime* dependency and today nothing under `kernel/` imports it. Only tests do. That is consistent with §14 ("Polars + DuckDB for execution") read as a forward commitment, but it is not yet true as a statement about this build. **Re-open at item 12, when `profile` is written** — the first component with an actual reason to reach for it. If `profile` uses duckdb the declaration was right all along; if it does not, then either the declaration or the usage is wrong, and the question is which one moves. Left as a runtime dependency in the meantime, deliberately: demoting it to `dev` now would be a bet on the second outcome, and the whole point is that the bet is not settled.
 
 ---
 
