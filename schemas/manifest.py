@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SourceBinding(BaseModel):
@@ -44,6 +44,35 @@ class BronzeConfig(BaseModel):
     format: Literal["parquet"] = "parquet"
     partition_by: str = "batch_id"
     retention_days: int = Field(..., gt=0, description="Mandatory — preflight fails if unset")
+
+
+class AuditConfig(BaseModel):
+    """The audit store's location and retention (§4.2.6).
+
+    A separate store *beside* Bronze, never inside it. `AuditRecord`s are
+    produced by `normalize`, i.e. after `ingest`, so writing them into a Bronze
+    partition would be a post-`ingest` write to Bronze (P10) and would leave that
+    partition without a stable content hash, collapsing §4.2.5 layer 3.
+
+    There is no `format` key here, unlike `BronzeConfig`. The absence is
+    deliberate: §4.2.1 pins Bronze's substrate because §4.2.1's three arguments
+    are about Bronze, and the audit store's format is an internal kernel matter
+    that no manifest has a reason to name. A key that cannot vary is worth
+    exposing only where a reader would otherwise expect variance, and §7.1 never
+    invited it here.
+    """
+
+    location: str = Field(
+        description=(
+            "A path abstraction, resolved the same way as bronze.location "
+            "(§4.2.2). Parallel to Bronze, never a path inside it."
+        )
+    )
+    retention_days: int = Field(
+        ...,
+        gt=0,
+        description="Mandatory, and floored at bronze.retention_days (§4.2.6)",
+    )
 
 
 class TargetConfig(BaseModel):
@@ -102,8 +131,50 @@ class Manifest(BaseModel):
     cadence: Literal["one_shot", "continuous"] = "one_shot"
     sources: list[SourceConfig]
     bronze: BronzeConfig
+    #: Required, with no default, exactly like `bronze`. A default location would
+    #: be the kernel choosing where a client's audit record lands, and a manifest
+    #: that omits the store is a manifest for a run whose account of itself has
+    #: nowhere to go.
+    audit: AuditConfig
     target: TargetConfig
     preflight: PreflightConfig = Field(default_factory=PreflightConfig)
     packs: list[str] = Field(default_factory=list)
     external_references: list[str] = Field(default_factory=list)
     egress: EgressConfig = Field(default_factory=EgressConfig)
+
+    @model_validator(mode="after")
+    def audit_must_outlive_bronze(self) -> "Manifest":
+        """`audit.retention_days` ≥ `bronze.retention_days` (§4.2.6, §6.2.2).
+
+        The constraint is P8, not tidiness. The two stores answer one question
+        jointly — Bronze produces the pre-image, the audit record says which rule
+        and which transform put it in its current state — so an audit store that
+        expires first opens a window where the data is still there and the
+        account of what was done to it is not. "The client can always tell what
+        happened to a record" then becomes false for every record in that window,
+        silently, on a date nobody chose. That failure is worse than losing both,
+        because the surviving Bronze partition makes the system look intact.
+
+        One-directional by design. Audit outliving Bronze is fine and often
+        correct: the record holds no source values, only hashes, rule ids and
+        transform names, so keeping it after the raw data is gone leaves a lawful
+        account of processing without extending the life of the personal data.
+
+        **Refused at load time, though §6.2.2 calls it a preflight blocker.** The
+        two are not in tension: preflight still reports it, because a manifest
+        that will not load is the most legible blocker there is. What load-time
+        refusal adds is that no code path reaches a run with an inverted
+        retention pair — not a test harness, not a future CLI subcommand that
+        forgot to call preflight, not a library caller. The check lives with the
+        data it constrains rather than with the stage that happens to report it,
+        which is the same reasoning as `egress.evidence_only` above.
+        """
+        if self.audit.retention_days < self.bronze.retention_days:
+            raise ValueError(
+                f"audit.retention_days ({self.audit.retention_days}) is shorter "
+                f"than bronze.retention_days ({self.bronze.retention_days}): the "
+                f"audit store must outlive Bronze (§4.2.6). Otherwise the raw "
+                f"data outlives the account of what was done to it, and P8 fails "
+                f"silently on a date nobody chose"
+            )
+        return self

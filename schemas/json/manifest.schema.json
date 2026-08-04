@@ -25,6 +25,28 @@
       "title": "ArmingConfig",
       "type": "object"
     },
+    "AuditConfig": {
+      "description": "The audit store's location and retention (\u00a74.2.6).\n\nA separate store *beside* Bronze, never inside it. `AuditRecord`s are\nproduced by `normalize`, i.e. after `ingest`, so writing them into a Bronze\npartition would be a post-`ingest` write to Bronze (P10) and would leave that\npartition without a stable content hash, collapsing \u00a74.2.5 layer 3.\n\nThere is no `format` key here, unlike `BronzeConfig`. The absence is\ndeliberate: \u00a74.2.1 pins Bronze's substrate because \u00a74.2.1's three arguments\nare about Bronze, and the audit store's format is an internal kernel matter\nthat no manifest has a reason to name. A key that cannot vary is worth\nexposing only where a reader would otherwise expect variance, and \u00a77.1 never\ninvited it here.",
+      "properties": {
+        "location": {
+          "description": "A path abstraction, resolved the same way as bronze.location (\u00a74.2.2). Parallel to Bronze, never a path inside it.",
+          "title": "Location",
+          "type": "string"
+        },
+        "retention_days": {
+          "description": "Mandatory, and floored at bronze.retention_days (\u00a74.2.6)",
+          "exclusiveMinimum": 0,
+          "title": "Retention Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "location",
+        "retention_days"
+      ],
+      "title": "AuditConfig",
+      "type": "object"
+    },
     "BronzeConfig": {
       "properties": {
         "location": {
@@ -280,6 +302,9 @@
     "bronze": {
       "$ref": "#/$defs/BronzeConfig"
     },
+    "audit": {
+      "$ref": "#/$defs/AuditConfig"
+    },
     "target": {
       "$ref": "#/$defs/TargetConfig"
     },
@@ -311,6 +336,7 @@
     "canonical_schema",
     "sources",
     "bronze",
+    "audit",
     "target"
   ],
   "title": "Manifest",
