@@ -10,8 +10,8 @@ manifest — the store tells you what it has, not what it should have.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+from kernel.stages.preflight import checks as _checks  # noqa: F401  (registers)
+from kernel.stages.preflight.contract import CheckContext, Outcome, unavailable
 from kernel.stages.preflight.digest import (
     DigestIncomplete,
     PreflightDigest,
@@ -19,58 +19,9 @@ from kernel.stages.preflight.digest import (
 )
 from kernel.stages.preflight.registry import IMPLEMENTATIONS, REGISTRY, CheckSpec
 from kernel.stages.preflight.report import PreflightReport
-from kernel.stages.preflight.result import CheckResult, CheckStatus
+from kernel.stages.preflight.result import CheckResult
+from kernel.stages.preflight.source import SourceProbe, probe_source
 from schemas.manifest import Manifest
-
-
-@dataclass(frozen=True)
-class Outcome:
-    """What one check implementation concluded.
-
-    Deliberately not a `CheckResult`: an implementation decides *status and
-    detail* and has no business setting its own severity, category or class.
-    Those come from the registry, so a check cannot quietly downgrade itself.
-    """
-
-    status: CheckStatus
-    detail: str
-
-
-def passed(detail: str) -> Outcome:
-    return Outcome(CheckStatus.PASSED, detail)
-
-
-def failed(detail: str) -> Outcome:
-    return Outcome(CheckStatus.FAILED, detail)
-
-
-def not_applicable(detail: str) -> Outcome:
-    """Use only where a *declared manifest fact* removes the check's meaning.
-
-    Never where the code to run it is missing — that is `unavailable`, and
-    conflating the two lets every unwritten check label itself inapplicable
-    (see `CheckStatus`).
-    """
-    return Outcome(CheckStatus.NOT_APPLICABLE, detail)
-
-
-def unavailable(detail: str) -> Outcome:
-    """The check did not run. Say plainly why, in the detail."""
-    return Outcome(CheckStatus.UNAVAILABLE, detail)
-
-
-@dataclass(frozen=True)
-class CheckContext:
-    """Everything a check may read.
-
-    Narrow on purpose: a check that needs something absent from here should say
-    `unavailable` rather than reach for it. The source is read once by the
-    runner and handed over as facts, so twenty-nine checks cannot become
-    twenty-nine reads of a client's production extract.
-    """
-
-    manifest: Manifest
-
 
 NOT_IMPLEMENTED = (
     "not implemented in this build; registered as a §6.2.2 check so that its "
@@ -103,15 +54,23 @@ def run_checks(context: CheckContext) -> tuple[CheckResult, ...]:
     return tuple(results)
 
 
-def run_preflight(manifest: Manifest, *, kernel_version: str) -> PreflightReport:
+def run_preflight(
+    manifest: Manifest,
+    *,
+    kernel_version: str,
+    environment: dict[str, str],
+) -> PreflightReport:
     """Run preflight against `manifest` and return the Preflight Report.
 
-    `kernel_version` is a required keyword with no default, for the reason
-    `RunManifest` requires one: it enters the digest an approval is bound to, so
-    a guessed value would bind an approval to a version nobody shipped.
+    Both keywords are required and neither has a default. `kernel_version` enters
+    the digest an approval binds to, so a guessed value would bind an approval to
+    a version nobody shipped. `environment` is passed rather than read from
+    `os.environ` inside because a preflight whose result depends on ambient
+    process state is one no test can pin and no operator can reproduce — the
+    same reason nothing here reads a clock.
     """
-    context = CheckContext(manifest=manifest)
-    results = run_checks(context)
+    probe = probe_source(manifest, environment)
+    results = run_checks(CheckContext(manifest=manifest, source=probe))
 
     digest: PreflightDigest | None = None
     digest_gap = ""
@@ -119,10 +78,13 @@ def run_preflight(manifest: Manifest, *, kernel_version: str) -> PreflightReport
         digest = compute_digest(
             manifest,
             kernel_version=kernel_version,
-            source_schema=None,
-            row_count=None,
+            source_schema=probe.columns,
+            row_count=probe.row_count,
         )
     except DigestIncomplete as exc:
         digest_gap = str(exc)
 
     return PreflightReport(results=results, digest=digest, digest_gap=digest_gap)
+
+
+__all__ = ["CheckContext", "SourceProbe", "run_checks", "run_preflight"]

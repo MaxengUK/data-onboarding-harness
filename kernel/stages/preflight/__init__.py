@@ -23,6 +23,14 @@ preflight as the answer to "can this even be connected to, and what is missing",
 and a report naming its own gaps is the shape of that deliverable.
 """
 
+from kernel.stages.preflight.contract import (
+    CheckContext,
+    Outcome,
+    failed,
+    not_applicable,
+    passed,
+    unavailable,
+)
 from kernel.stages.preflight.digest import (
     DigestComponent,
     DigestIncomplete,
@@ -40,7 +48,8 @@ from kernel.stages.preflight.result import (
     Severity,
     Verdict,
 )
-from kernel.stages.preflight.runner import CheckContext, run_checks, run_preflight
+from kernel.stages.preflight.runner import run_checks, run_preflight
+from kernel.stages.preflight.source import SourceProbe, probe_source
 
 __all__ = [
     "BY_ID",
@@ -54,13 +63,20 @@ __all__ = [
     "CheckStatus",
     "DigestComponent",
     "DigestIncomplete",
+    "Outcome",
     "PreflightDigest",
     "PreflightReport",
     "Severity",
+    "SourceProbe",
     "Verdict",
     "compute_digest",
+    "failed",
     "manifest_hash",
+    "not_applicable",
+    "passed",
+    "probe_source",
     "render_report",
     "run_checks",
     "run_preflight",
+    "unavailable",
 ]
