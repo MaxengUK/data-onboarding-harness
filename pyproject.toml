@@ -4,6 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "data-onboarding-harness"
+# Deliberately independent of the CLAUDE.md version, which is currently ahead of
+# this one. They answer different questions: this is the version of the *code*,
+# and CLAUDE.md's is the version of the *constitutional decisions* the code was
+# written against. Several kernel releases can sit against one spec version, and
+# a spec change that no code has caught up with yet is an ordinary state rather
+# than an error -- so holding the two in lockstep would buy bookkeeping and
+# nothing else. A run records both (CLAUDE.md 12, kernel/run_manifest.py), which
+# is where the pair is meant to be read together. The gap is the design, not
+# drift; do not "sync" them.
 version = "0.4.0"
 description = "MAXENG Data Onboarding Harness"
 requires-python = ">=3.12"
