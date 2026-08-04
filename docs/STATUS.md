@@ -1,7 +1,7 @@
 # STATUS — 4 August 2026
 
-**Reflects:** `CLAUDE.md` v0.5.0 · repo `MaxengUK/data-onboarding-harness` @ `7178011`
-**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug) is spec and governance only — no kernel code changed: the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, and the repo was licensed.
+**Reflects:** `CLAUDE.md` v0.5.1 · repo `MaxengUK/data-onboarding-harness` @ `35787a2`
+**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and the first half of item 4 was built — the storage path abstraction and the Bronze store, with `ingest`, `profile`, the audit store and CLI wiring all deliberately out of scope.
 **This is a living document.** Sections are updated in place as items close, not appended to. Where a section records a decision rather than a state, it says so.
 
 ---
@@ -13,7 +13,8 @@
 | 1 | Repo skeleton, Pydantic schemas, JSON Schema, CI guard | 1.5 | ✅ Closed |
 | 2 | Evidence emitter, egress allowlist, Leg 1 | 1.0 | ✅ Closed (Leg 1 at unit level; end-to-end deferred to Gate 0 close) |
 | 3 | Predicate registry + semantic type registry | 1.0 | ◐ Semantic type registry seeded in `kernel/registries.py`; **predicate registry not started** |
-| 4 | Bronze store **+ audit store** | 1.5 → 2.0 | ⬜ Next. Both blocking decisions taken — see §4. Estimate raised: it is two stores, not one |
+| 4a | Path abstraction (`kernel/storage`) + Bronze store (`kernel/bronze`) | 1.0 | ✅ Closed. 30 tests; each control verified by breaking it |
+| 4b | Audit store — second consumer of `kernel/storage` (§4.2.6) | 1.0 | ⬜ Next |
 | 5–16 | Preflight, arming, walking skeleton, tr-core, discovery, Gate 0/1 | 26 | ⬜ Not started |
 
 Two unplanned pieces were added and both closed real defects: guard hardening and the schema sync test. Neither was in BUILD-PLAN; both belong in the record as scope that earned its place.
@@ -41,8 +42,9 @@ The session's highest-value output. Each was invisible until code forced the que
 ## 3. Verification debt — clear at the start of next session
 
 1. **GitHub Actions for `48f09f1` was never checked.** The largest commit of the session (13 files, ~1,650 lines, two new modules). Confirm green and confirm the guard step ran.
-2. **`docs/ROADMAP.md` and `docs/BUILD-PLAN.md` presence in the repo has never been verified.** They may exist only outside it.
+2. ~~**`docs/ROADMAP.md` and `docs/BUILD-PLAN.md` presence has never been verified.**~~ Closed — both are present in `docs/`.
 3. ~~**No LICENSE file.**~~ Closed — proprietary `LICENSE` added at the repo root. MIT and Apache were both rejected: the repo carries `tr-core`, which is the reusable rule asset the whole economic argument in §1 rests on, and a permissive licence would place it in the public domain of every engagement it touches. See §8 for the obligation this leaves open.
+4. **CI has never been checked against a `pytest` run that includes `duckdb`.** `tests/test_bronze.py` imports it to read Parquet row group metadata. It is a declared runtime dependency, so this should be fine, but "should be fine" is what item 1 above is about.
 
 ---
 
@@ -56,23 +58,66 @@ Both blocking questions are decided and written into `CLAUDE.md` §4.2.1–4.2.6
 
 **`AuditRecord` does *not* live in Bronze.** The previous session's note that "Bronze also now hosts `AuditRecord`" was wrong, and finding out why produced the sharpest correction of this pass: audit records are produced by `normalize`, i.e. *after* `ingest`, so writing them into Bronze is a post-ingest write to Bronze and a direct P10 violation. It also breaks the content hash — a partition that grows as later stages run has no stable hash, so §4.2.5's third layer collapses. The audit store is a **separate, parallel, append-only store** under the same three-layer discipline (§4.2.6), with `audit.retention_days` ≥ `bronze.retention_days` enforced as a preflight blocker.
 
-**Build-order consequence.** Item 4 is now two stores, not one, and it stays ahead of preflight — preflight's new governance blocker is a check on the audit store's retention, so the manifest models have to exist first.
+**Build-order consequence.** Item 4 is two stores, not one, split into 4a (built this session, §4a) and 4b. It stays ahead of preflight — preflight's new governance blocker is a check on the audit store's retention, so the manifest models have to exist first.
 
-### 4.1 Known spec/code divergence — deliberate, closes with item 4
+**A third defect surfaced while building 4a**, and it is the same shape as B1 and B5: §4.2 and the §6 stage table both promised `ingest` lands raw input *byte-for-byte*. Writing the store made it obvious that the promise cannot hold — non-UTF-8 bytes do not enter a text column, and a `binding.kind: database` source has no byte stream in existence to preserve. Replaced in `CLAUDE.md` 0.5.1 with the property that does hold and that the pre-image guarantee actually needs: Bronze loads input **unmodified and uncoerced**, and the content hash covers what Bronze actually stores. The residual question belongs to `ingest` and is recorded in §4a.2. **The pattern holds at six findings: every spec-level error was found by trying to write the code, never by re-reading the document.**
 
-`CLAUDE.md` 0.5.0 describes manifest fields that `schemas/manifest.py` does not yet have. This is a **deliberate temporary divergence**, recorded so that the next session recognises it as a known gap rather than a defect, and so that it cannot quietly become permanent:
+### 4.1 Known spec/code divergence — half closed, half deliberate
 
-| Spec (§7.1, v0.5.0) | Code (`schemas/manifest.py`) | Closes |
+| Spec (§7.1) | Code (`schemas/manifest.py`) | Status |
 |---|---|---|
-| `bronze.format`, typed `Literal["parquet"]` — pinned, not a toggle (§4.2.1) | `BronzeConfig` has no `format` field | Item 4 |
-| `audit:` block — `location`, `retention_days` | No `AuditConfig` model exists | Item 4 |
-| `audit.retention_days` ≥ `bronze.retention_days`, governance blocker (§6.2.2) | No cross-field validator | Item 4, with the model |
+| `bronze.format`, typed `Literal["parquet"]` (§4.2.1) | `BronzeConfig.format` | ✅ Closed in 4a |
+| `audit:` block — `location`, `retention_days` | No `AuditConfig` model | ⬜ Item 4b |
+| `audit.retention_days` ≥ `bronze.retention_days`, governance blocker (§6.2.2) | No cross-field validator | ⬜ Item 4b |
 
-**Why it was left open rather than closed immediately.** Adding the two models is a few lines, but they are the first lines of item 4, not a spec edit — `AuditConfig` without an audit store is a model with no writer, and the cross-field validator is only meaningful once preflight has a check to run it from. Writing them now would put half of item 4 in a commit labelled as a documentation change.
+**Why the audit half stays open.** `AuditConfig` without an audit store is a model with no writer, and the cross-field validator is only meaningful once preflight has a check to run it from. Both land with 4b.
 
-**Why it is safe today.** Nothing is out of sync in the enforceable sense: the JSON Schema sync test pins `schemas/json/*.json` to the Pydantic models, not the spec to the models, so it stays green. The divergence is a spec commitment that has not been implemented yet, in a direction where the code is silently permissive — a manifest carrying `format:` or `audit:` today would be accepted and ignored, not rejected. That is the failure mode to close first when item 4 starts.
+**The failure mode while it is open** is unchanged and worth restating, because it is the one that could persist quietly: the divergence runs in the direction where the code is *silently permissive*. A manifest carrying an `audit:` block today is accepted and ignored, not rejected. Close that first in 4b.
 
-**Note the shape of the `Literal["parquet"]` decision.** The alternative was to drop the field. It was kept because a configurable `format` field advertises that other formats work, while `Literal["parquet"]` keeps the schema shape available for a future second substrate and admits exactly one value today — the same pattern already used for `egress.evidence_only`, which is refused by a validator rather than typed away for the same reason.
+**On the `Literal["parquet"]` shape.** Kept rather than dropped because a configurable `format` field advertises that other formats work. Note this differs from `egress.evidence_only`, which stays a `bool` refused by a validator: a second egress mode would need its own gate, so that field stays open and the refusal is behavioural, whereas a second Bronze format is a new substrate implementation and until one exists there is nothing for the type to admit.
+
+---
+
+## 4a. Built this session — path abstraction and Bronze store
+
+`kernel/storage/` (§4.2.2) and `kernel/bronze/` (§4.2). 30 tests. Not built, by decision: `ingest`, `profile`, CLI wiring, the audit store, S3/Azure backends, partition listing, retention and GC.
+
+**Writer determinism was the real work.** Measured before pinning, on polars 1.43.2: repeated writes of one frame are byte-stable, thread count does not affect output, and the Parquet footer carries no timestamp — `created_by` is just `"Polars"`. So there is no run-to-run nondeterminism to find today. But `row_group_size` defaults to a value *derived from the data*, and at 400k rows the default and an explicit `100_000` produce different bytes. The risk was never that one call returns two answers; it is a derived default drifting with input shape or a library release, which is the same failure class as the exporter writing CRLF on one host and LF on another.
+
+`PARQUET_WRITER_OPTIONS` pins compression, level, statistics, row group size and page size, and `_serialise` is the kernel's only `write_parquet` call site.
+
+**What pinning does not buy, stated so nobody over-reads it later.** Bronze verification does *not* depend on write reproducibility: `verify_partition` re-hashes stored bytes and never re-serialises, so existing partitions survive a polars upgrade untouched. What pinning buys is that a partition's bytes are a function of its data alone — making two ingests of one extract comparable by hash — and that future Parquet *output*, where P2 applies directly, is deterministic by construction. It does not survive a version bump, so `PartitionRef.writer` records the library version and a cross-version byte difference stays explicable.
+
+**Every control was verified by breaking it**, per the lesson from the first session:
+
+| Break | Result |
+|---|---|
+| `_serialise` ignores the pinned options | Row group test failed — 2 observed, 3 expected |
+| `read_partition` skips `verify_partition` | Both tamper tests failed |
+| `delete_partition(force=…)` added to the module | Both introspection tests failed |
+
+The second one is worth keeping in mind: without verification, a truncated partition surfaced as a polars `ComputeError`. Verification does not only catch tampering, it converts an incomprehensible parser crash into a named diagnosis.
+
+**Two design notes that will matter later.** The expected hash is never written next to the data — its authority is the run manifest (§12), outside the partition, because co-locating it would make the check circular. And `write_bytes` uses `O_CREAT|O_EXCL` rather than write-temp-then-rename, so a partition id is claimed atomically; the cost is a possible partial object after a crash, which is harmless because the `PartitionRef` is returned only after the write completes and an unnamed partition is unreachable.
+
+### 4a.1 Memory — not a Bronze problem, a single-node ceiling showing up in Bronze
+
+A partition is serialised whole in memory and read back whole. This should not be logged as a Bronze defect to be fixed with a streaming writer, because it is not where the limit lives: §14 puts the harness on Polars + DuckDB, single-node, with a Spark backend held in reserve for volumes that force it. **A dataset that does not fit in memory does not fit this build anywhere** — `profile`, `validate` and `resolve` would each hit the same wall a step later. Bronze is simply the first place it becomes visible, because it is the first component that touches the whole extract.
+
+The consequence for design is that a streaming Bronze writer bolted under a single-node kernel would buy nothing: the partition would land and the next stage would fall over. When the ceiling is actually reached, the answer is §14's Spark backend, and what Bronze owes that day is a storage interface that can express chunked writes. The current interface cannot, deliberately — see `kernel/storage`'s note on why the second backend is expected to change it.
+
+Worth benchmarking at Gate 1 alongside open question 3 (approximate FD cost on a real dealership extract), since both are answered by the same measurement: how large the largest realistic extract actually is.
+
+### 4a.2 Open for `ingest` — are source bytes preserved at all?
+
+§4.2 v0.5.1 withdrew the *byte-for-byte* claim and left this open deliberately. The question `ingest` has to answer: **beyond loading values unmodified, does Bronze also retain the original source bytes?**
+
+- **File sources — possible.** A `Binary` column alongside the parsed values, or the raw file landed beside the Parquet object in the same partition. Either gives a true byte-level pre-image, including bytes that are not valid UTF-8 and therefore cannot enter a text column at all. Both cost storage, roughly doubling the partition for the raw-file option.
+- **Database sources — not possible, at any price.** There are no source bytes to keep. The driver materialises values before the Harness is reached; what arrives is already a decoded Python or Arrow value, and "the bytes" only ever existed on the wire. No design choice recovers them.
+
+So the honest outcome is likely **asymmetric**: file sources may offer a stronger guarantee than database sources can. That asymmetry has to be decided deliberately and stated in the manifest or the Readiness Report rather than discovered by a client. The alternative — levelling down to the weaker guarantee everywhere for symmetry's sake — throws away a real capability on file sources, which are the common case in a first engagement.
+
+Decide before `ingest` is written, not during.
 
 ---
 
