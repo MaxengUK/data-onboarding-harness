@@ -1,7 +1,7 @@
 # STATUS — 4 August 2026
 
-**Reflects:** `CLAUDE.md` v0.5.1 · repo `MaxengUK/data-onboarding-harness` @ `35787a2`
-**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and the first half of item 4 was built — the storage path abstraction and the Bronze store, with `ingest`, `profile`, the audit store and CLI wiring all deliberately out of scope.
+**Reflects:** `CLAUDE.md` v0.5.2 · repo `MaxengUK/data-onboarding-harness` @ `4b78af3`
+**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. `ingest`, `profile`, `normalize` and CLI wiring remain deliberately out of scope: what exists is the storage floor those stages will stand on, not the stages.
 **This is a living document.** Sections are updated in place as items close, not appended to. Where a section records a decision rather than a state, it says so.
 
 ---
@@ -14,10 +14,11 @@
 | 2 | Evidence emitter, egress allowlist, Leg 1 | 1.0 | ✅ Closed (Leg 1 at unit level; end-to-end deferred to Gate 0 close) |
 | 3 | Predicate registry + semantic type registry | 1.0 | ◐ Semantic type registry seeded in `kernel/registries.py`; **predicate registry not started** |
 | 4a | Path abstraction (`kernel/storage`) + Bronze store (`kernel/bronze`) | 1.0 | ✅ Closed. 30 tests; each control verified by breaking it |
-| 4b | Audit store — second consumer of `kernel/storage` (§4.2.6) | 1.0 | ⬜ Next |
+| 4b | Audit store (`kernel/audit`) + `AuditConfig` + shared serialiser | 1.0 | ✅ Closed. 35 tests; each control verified by breaking it |
+| — | **Run manifest** (`kernel/run_manifest`) — unplanned, see §4b.3 | 0.5 | ✅ Closed. 13 tests |
 | 5–16 | Preflight, arming, walking skeleton, tr-core, discovery, Gate 0/1 | 26 | ⬜ Not started |
 
-Two unplanned pieces were added and both closed real defects: guard hardening and the schema sync test. Neither was in BUILD-PLAN; both belong in the record as scope that earned its place.
+156 tests, all green. Three unplanned pieces have been added across the two sessions and each closed a real defect: guard hardening, the schema sync test, and now the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
 
 ---
 
@@ -32,8 +33,9 @@ The session's highest-value output. Each was invisible until code forced the que
 | — | **Exporter wrote CRLF on Windows, LF on Linux.** Same models, different bytes by machine — a silent P2 violation that `.gitattributes` masked from `git diff` entirely. | `newline="\n"` plus explicit trailing newline. Would never have been found by inspection |
 | — | **Cardinality threshold measured the wrong quantity.** Field-value hashes were gated on dataset cardinality, but reversibility depends on the size of the *value space*. An MSISDN column clears any plausible threshold while remaining trivially sweepable (~10⁹). | Field-value hashes denied outright. Only artifact-level content hashes survive. §8 wording corrected |
 | — | **The pre-commit hook was never installed.** `pre-commit run --all-files` had been reporting Passed the whole time — it runs the hook manually, not through git's commit path. | `pre-commit install`, then verified by observing an actual commit get **blocked** |
+| — | **§12 named no record for audit segment hashes.** §4.2.6 puts the audit store under §4.2.5's three layers, and layer 3 — the only one that carries weight — needs the expected hash held *outside* the store. §12's run manifest enumerated Bronze partitions and stopped there, so the control was mandated with nothing to enforce it from. | Run manifest records audit segment ids and content hashes beside Bronze's; an object it does not name is **unreadable**, not merely unrecorded. CLAUDE.md → 0.5.2 |
 
-**The pattern, now stable across five findings:** every serious spec-level error was a *missing concept*, not a wording error — and each was found by trying to write the code, not by re-reading the document. B1 (Bronze) and B5 (audit record) are the same shape.
+**The pattern, now stable across seven findings:** every serious spec-level error was a *missing concept*, not a wording error — and each was found by trying to write the code, not by re-reading the document. B1 (Bronze), B5 (audit record) and the §12 omission are the same shape: a section that was internally coherent and silently depended on something no other section provided.
 
 **The corollary, learned three times today:** a control that passes proves nothing. The guard, the schema sync test, and the pre-commit hook each only earned trust when observed to *fail* where failure was correct.
 
@@ -60,21 +62,19 @@ Both blocking questions are decided and written into `CLAUDE.md` §4.2.1–4.2.6
 
 **`AuditRecord` does *not* live in Bronze.** The previous session's note that "Bronze also now hosts `AuditRecord`" was wrong, and finding out why produced the sharpest correction of this pass: audit records are produced by `normalize`, i.e. *after* `ingest`, so writing them into Bronze is a post-ingest write to Bronze and a direct P10 violation. It also breaks the content hash — a partition that grows as later stages run has no stable hash, so §4.2.5's third layer collapses. The audit store is a **separate, parallel, append-only store** under the same three-layer discipline (§4.2.6), with `audit.retention_days` ≥ `bronze.retention_days` enforced as a preflight blocker.
 
-**Build-order consequence.** Item 4 is two stores, not one, split into 4a (built this session, §4a) and 4b. It stays ahead of preflight — preflight's new governance blocker is a check on the audit store's retention, so the manifest models have to exist first.
+**Build-order consequence.** Item 4 was two stores, not one, split into 4a (§4a) and 4b (§4b). Both are closed. It stayed ahead of preflight — preflight's governance blocker is a check on the audit store's retention, so the manifest models had to exist first, and they now do.
 
-**A third defect surfaced while building 4a**, and it is the same shape as B1 and B5: §4.2 and the §6 stage table both promised `ingest` lands raw input *byte-for-byte*. Writing the store made it obvious that the promise cannot hold — non-UTF-8 bytes do not enter a text column, and a `binding.kind: database` source has no byte stream in existence to preserve. Replaced in `CLAUDE.md` 0.5.1 with the property that does hold and that the pre-image guarantee actually needs: Bronze loads input **unmodified and uncoerced**, and the content hash covers what Bronze actually stores. The residual question belongs to `ingest` and is recorded in §4a.2. **The pattern holds at six findings: every spec-level error was found by trying to write the code, never by re-reading the document.**
+**A third defect surfaced while building 4a**, the sixth of this shape: §4.2 and the §6 stage table both promised `ingest` lands raw input *byte-for-byte*. Writing the store made it obvious that the promise cannot hold — non-UTF-8 bytes do not enter a text column, and a `binding.kind: database` source has no byte stream in existence to preserve. Replaced in `CLAUDE.md` 0.5.1 with the property that does hold and that the pre-image guarantee actually needs: Bronze loads input **unmodified and uncoerced**, and the content hash covers what Bronze actually stores. The residual question belongs to `ingest` and is recorded in §4a.2.
 
-### 4.1 Known spec/code divergence — half closed, half deliberate
+### 4.1 Known spec/code divergence — ✅ closed
 
 | Spec (§7.1) | Code (`schemas/manifest.py`) | Status |
 |---|---|---|
 | `bronze.format`, typed `Literal["parquet"]` (§4.2.1) | `BronzeConfig.format` | ✅ Closed in 4a |
-| `audit:` block — `location`, `retention_days` | No `AuditConfig` model | ⬜ Item 4b |
-| `audit.retention_days` ≥ `bronze.retention_days`, governance blocker (§6.2.2) | No cross-field validator | ⬜ Item 4b |
+| `audit:` block — `location`, `retention_days` | `AuditConfig`, required with no default | ✅ Closed in 4b |
+| `audit.retention_days` ≥ `bronze.retention_days`, governance blocker (§6.2.2) | `Manifest.audit_must_outlive_bronze` | ✅ Closed in 4b |
 
-**Why the audit half stays open.** `AuditConfig` without an audit store is a model with no writer, and the cross-field validator is only meaningful once preflight has a check to run it from. Both land with 4b.
-
-**The failure mode while it is open** is unchanged and worth restating, because it is the one that could persist quietly: the divergence runs in the direction where the code is *silently permissive*. A manifest carrying an `audit:` block today is accepted and ignored, not rejected. Close that first in 4b.
+**The silently-permissive direction is closed.** A manifest carrying an `audit:` block was previously accepted and ignored; it is now parsed, and an inverted retention pair is refused at load. That the check runs at load rather than only in preflight is deliberate and not a departure from §6.2.2: preflight still reports it — a manifest that will not load is the most legible blocker there is — but load-time refusal means no code path reaches a run with an inverted pair, including one that never called preflight. The check lives with the data it constrains rather than with the stage that happens to report it, which is the same reasoning already used for `egress.evidence_only`.
 
 **On the `Literal["parquet"]` shape.** Kept rather than dropped because a configurable `format` field advertises that other formats work. Note this differs from `egress.evidence_only`, which stays a `bool` refused by a validator: a second egress mode would need its own gate, so that field stays open and the refusal is behavioural, whereas a second Bronze format is a new substrate implementation and until one exists there is nothing for the type to admit.
 
@@ -86,7 +86,7 @@ Both blocking questions are decided and written into `CLAUDE.md` §4.2.1–4.2.6
 
 **Writer determinism was the real work.** Measured before pinning, on polars 1.43.2: repeated writes of one frame are byte-stable, thread count does not affect output, and the Parquet footer carries no timestamp — `created_by` is just `"Polars"`. So there is no run-to-run nondeterminism to find today. But `row_group_size` defaults to a value *derived from the data*, and at 400k rows the default and an explicit `100_000` produce different bytes. The risk was never that one call returns two answers; it is a derived default drifting with input shape or a library release, which is the same failure class as the exporter writing CRLF on one host and LF on another.
 
-`PARQUET_WRITER_OPTIONS` pins compression, level, statistics, row group size and page size, and `_serialise` is the kernel's only `write_parquet` call site.
+`PARQUET_WRITER_OPTIONS` pins compression, level, statistics, row group size and page size. It began life private inside `kernel/bronze`; 4b moved it to `kernel/serialisation.py` and put a test under the claim it had been making in a docstring — see §4b.2.
 
 **What pinning does not buy, stated so nobody over-reads it later.** Bronze verification does *not* depend on write reproducibility: `verify_partition` re-hashes stored bytes and never re-serialises, so existing partitions survive a polars upgrade untouched. What pinning buys is that a partition's bytes are a function of its data alone — making two ingests of one extract comparable by hash — and that future Parquet *output*, where P2 applies directly, is deterministic by construction. It does not survive a version bump, so `PartitionRef.writer` records the library version and a cross-version byte difference stays explicable.
 
@@ -123,6 +123,65 @@ Decide before `ingest` is written, not during.
 
 ---
 
+## 4b. Built this session — the audit store
+
+`kernel/audit/` (§4.2.6), `kernel/serialisation.py`, `AuditConfig`, and the run manifest that turned out to be a precondition rather than a follow-on. 48 new tests.
+
+**Not built, by decision:** `normalize` (the producer of every record this store will hold), retention and GC for either store, S3/Azure backends, the remaining §12 run manifest fields, and any CLI surface. The division is the same one 4a drew — this is a place for records to go, not the thing that makes them.
+
+**The design question was "what is the audit store's partition?"** §4.2.6 says a growing store has no stable content hash, which is true and also true of Bronze: the Bronze *store* grows too, one partition per batch, forever. Nobody proposed hashing "Bronze", because §4.2.5 hashes a partition. So the audit store did not need a new mechanism, it needed its own unit of closure. That unit is a **segment**, and the whole of 4b follows from picking what closes one.
+
+**Segments are cut by source row ordinal, and nothing else.** Segment N carries the audit records of rows `[N·100k, (N+1)·100k)`. Assignment is a pure function of the ordinal — no clock, no worker id, no accumulated state — so the same records in any arrival order produce the same segments with the same bytes. Two alternatives were rejected on the record: **time-based flushing** reads the wall clock, so boundaries move between runs and P2 falls immediately; **byte-size flushing** is a function of the *compressed* size, so a polars upgrade would silently re-segment a store whose earlier segments were cut differently. A row count has neither property. Buffering per worker, the obvious first design, does not work either — it moves the nondeterminism rather than removing it.
+
+**Sorting inside the writer, not only in the assigner.** `write_segment` re-sorts records it is handed, which is redundant for every correct caller. That redundancy is the point: `normalize` will hand records over in worker completion order, and a property that depends on callers being careful is not a property.
+
+### 4b.1 Three schema decisions, all subtractions
+
+`AuditRecord` was a stub carrying "the fields will grow". It shrank instead, and each removal bought something specific:
+
+| Change | Why |
+|---|---|
+| **`occurred_at` removed** | A per-record wall-clock read is a per-record source of nondeterminism in a store whose entire integrity story is a content hash. Time belongs to the run, and the run manifest records it. P8 is unharmed: a record is reached through the segment that names its run, so "when" is answered one indirection away and answered *once*, rather than restated a million times with microsecond noise no reader wants and no replay can reproduce. |
+| **`run_id`, `batch_id`, `bronze_partition` removed** | All three are constant across a segment, so they belong to the segment and now live on `SegmentRef`. The gain is not deduplication: with them on the record, a segment's bytes were a function of *which run wrote them* rather than *what was written*, so two runs over identical input produced different bytes for identical facts. With run identity held one level up, they do not — and a replay's audit store can be diffed against the original byte for byte. `batch_id` did not come back: §4.2.4 makes a batch a partition. |
+| **`row_ordinal` added** | The only addition, and the one the pure segment assignment depends on. |
+
+The direction is worth noting because it inverts the usual drift: a stub's fields normally accumulate. These three came off because writing the store made clear what each one cost, and none of them was paying for itself.
+
+### 4b.2 The break round found a hole in a test, not in the store
+
+Every control was broken deliberately, per the standing lesson:
+
+| Break | Result |
+|---|---|
+| `write_segment` stops sorting | Writer-sort test failed — **but the central worker-order test passed** |
+| `read_segment` skips `verify_segment` | Both tamper tests failed |
+| A second `write_parquet` call site added | Call-site test failed |
+| `RunManifest.segment()` returns the first ref instead of raising | Absent-segment test failed |
+| Audit segments no longer checked against the manifest's run id | Foreign-run test failed |
+| Duplicate id detection removed | Repeated-id test failed |
+
+**The first row is the finding.** The central acceptance test — same input, different worker orders, byte-identical segments — went through `assign_segments`, which sorts. So it exercised one of the two sorting layers and would have passed with the writer's own sort deleted. A test that names the property in its title while covering half of it is worse than an absent test, because it is counted. It now runs both write paths: the intended one and the one a careless caller takes.
+
+The same shape recurred in the run manifest tests. The absent-segment test originally asked an *empty* manifest for a segment, which makes almost any lenient lookup blow up on its own. Rewritten to record one segment and ask for a different one that is also on disk, it catches the case that matters: a lookup falling back to "close enough" returns the wrong reference, the hash matches its own bytes, and the read succeeds **silently** with the wrong segment.
+
+**The corollary is now sharper than "break your controls".** Breaking a control tells you whether *some* test fails. It does not tell you whether the test you believed in is the one that caught it — and here, twice, it was not.
+
+Also from this round: without verification, a truncated segment surfaces as a raw polars `ComputeError`, exactly as it did for Bronze in 4a. Verification converts an incomprehensible parser crash into a named diagnosis.
+
+### 4b.3 The run manifest was a precondition, not a follow-on
+
+`kernel/storage`'s six-member surface carried one Bronze-shaped assumption: **the caller always already knows the name of the object it wants.** For Bronze that is free, because §12 makes the run manifest the authority for partition ids. For the audit store it is not free — its reader asks "what happened to this record?", which is a query, and the first instinct is to add `list()`.
+
+Adding it would have been wrong, and the reason is the same one that keeps the expected hash out of the partition it describes: **a directory listing is not tamper-evident.** It reports what is present *now*, which is exactly what an adversary controls — a deleted segment simply does not appear, and a missing segment becomes indistinguishable from one never written. So the store stayed addressable by known id, and the id had to come from somewhere.
+
+That somewhere was named in §12 for Bronze and named nowhere for audit, which is the spec defect in §2. `kernel/run_manifest.py` closes it: partition refs and segment refs, lookups that refuse an unnamed id, and read helpers whose signature makes the manifest unavoidable. One asymmetry fell out and is now in the spec — a run may reference Bronze partitions written by **earlier** runs (read-once and rule backtesting both depend on it), but only its **own** audit segments, because a run reads Bronze and writes audit.
+
+**Deferred rather than defaulted:** pack versions, reference snapshot ids, the arming record, applied transforms. An `arming: ArmingRecord | None = None` would let a run emit a manifest with no arming record and still look complete — the silently-permissive failure mode this repo has already had to close once, in exactly this document.
+
+**`kernel/storage` was not changed, and that is the result.** Five of its six members served the second store unchanged. The sixth, `exists()`, still has no kernel caller — preflight's reachability check will likely be its first. The honest summary is that the abstraction was one member too wide, not one member too narrow.
+
+---
+
 ## 5. Small items flagged but not actioned
 
 - `PreflightConfig.row_count_bounds` is `dict[str, int]`; a typed `RowCountBounds` model would stop `{"foo": 5}` and `{}` from validating. A preflight blocker will depend on this.
@@ -130,6 +189,7 @@ Decide before `ingest` is written, not during.
 - `tenant` and `engagement` were removed from the evidence artifact (fail-closed, correct for now). The Readiness Report (item 13) must bind itself to an engagement somehow — decide the source then.
 - VKN label matching remains a fixed spelling list. The real answer is semantic-type binding via the manifest's `column_map` (§7.5), which lands with item 3. Do not keep widening the regex.
 - `;` delimiter detection in the guard is tr-TR-specific knowledge sitting in the wrong layer. It belongs in `packs/core/tr-core` once that exists.
+- `pyproject.toml` declares `version = "0.4.0"` while `CLAUDE.md` is at 0.5.2. If these are meant to be independent — a package version and a spec version — nothing says so and they will keep being read as drift. `RunManifest.kernel_version` is caller-supplied today precisely to avoid guessing which one it means; decide before anything reads a version at runtime.
 
 ---
 
