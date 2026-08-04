@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Annotated
 
 import typer
 import yaml
@@ -47,9 +48,10 @@ EXIT_UNUSABLE_MANIFEST = 2
 
 @app.command()
 def preflight(
-    manifest: Path = typer.Option(
-        ..., "--manifest", "-m", help="Path to the engagement manifest (YAML)"
-    ),
+    manifest: Annotated[
+        Path,
+        typer.Option("--manifest", "-m", help="Path to the engagement manifest (YAML)"),
+    ],
 ) -> None:
     """Verify every §6.2.2 precondition and emit the Preflight Report."""
     try:
@@ -82,8 +84,10 @@ def preflight(
 
 @app.command()
 def arm(
-    preflight_digest: str = typer.Option(..., "--preflight", help="Preflight digest hash"),
-    approver: str = typer.Option(..., "--approver", help="Approver identity"),
+    preflight_digest: Annotated[
+        str, typer.Option("--preflight", help="Preflight digest hash")
+    ],
+    approver: Annotated[str, typer.Option("--approver", help="Approver identity")],
 ) -> None:
     """Arm a run against a preflight digest. **Not implemented** (BUILD-PLAN item 6)."""
     console.print(
