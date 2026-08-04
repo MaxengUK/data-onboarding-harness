@@ -1,0 +1,79 @@
+MAXENG PROPRIETARY LICENCE
+
+Copyright (c) 2026 MAXENG. All rights reserved.
+
+This software and its accompanying materials — including the execution kernel, the
+rule packs under `packs/`, the schemas, the documentation, and the specification in
+`CLAUDE.md` — are the confidential and proprietary property of MAXENG (the
+"Software"). They are licensed, not sold, and no title or ownership passes to any
+recipient.
+
+1. NO GRANT BY DEFAULT
+
+   No right or licence to use, copy, install, execute, modify, translate, merge,
+   publish, distribute, sublicense, sell, lease, or otherwise exploit the Software
+   is granted except under a separate written agreement signed by MAXENG. Access to
+   this repository, by any means, does not itself constitute such an agreement.
+
+2. RESTRICTIONS
+
+   Except to the extent that a signed agreement expressly permits it, or that
+   applicable law expressly permits notwithstanding this clause, no person may:
+
+   (a) copy or reproduce the Software, in whole or in part, in any medium;
+
+   (b) distribute, disclose, publish, transmit, or otherwise make the Software
+       available to any third party;
+
+   (c) create derivative works of the Software, including adapted, translated, or
+       extended versions of any rule pack;
+
+   (d) reverse engineer, decompile, or disassemble any part of the Software supplied
+       in compiled or container-image form;
+
+   (e) remove, obscure, or alter any copyright, licence, or attribution notice.
+
+3. ENGAGEMENT DELIVERABLES
+
+   Where MAXENG deploys the Software into a client environment under an engagement
+   agreement, that agreement governs the client's rights of use, and its terms
+   prevail over this file for that client to the extent of any conflict. Nothing in
+   such a deployment transfers ownership of the Software, and the client-layer rule
+   packs authored for an engagement are held under the terms of that agreement, in
+   separate private repositories, and are not part of this repository.
+
+4. THIRD-PARTY COMPONENTS
+
+   The Software depends on, and may be distributed alongside, third-party components
+   that are licensed separately by their respective owners under their own terms.
+   Those terms — not this licence — govern those components, and nothing in this
+   file restricts any right granted, or removes any obligation imposed, by them.
+
+   Several of those licences (notably Apache License 2.0) impose attribution and
+   notice-preservation obligations that attach on redistribution, including
+   redistribution in a container image. Distribution of the Software in any form
+   that carries third-party components must be accompanied by the corresponding
+   notices. A `NOTICE` file collecting those attributions, generated from the
+   dependency inventory, is a prerequisite for the first distributed build.
+
+5. NO WARRANTY
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+   FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT.
+
+6. LIMITATION OF LIABILITY
+
+   TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, MAXENG SHALL NOT BE LIABLE FOR
+   ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR
+   OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+   OTHER DEALINGS IN THE SOFTWARE. Nothing in this clause excludes or limits any
+   liability that cannot lawfully be excluded or limited.
+
+7. TERMINATION
+
+   Any use of the Software in breach of this licence terminates all rights that may
+   otherwise have been granted, immediately and without notice, and the recipient
+   must destroy all copies in their possession or control.
+
+Enquiries regarding licensing: MAXENG.

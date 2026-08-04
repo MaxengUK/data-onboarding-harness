@@ -7,6 +7,14 @@ name = "data-onboarding-harness"
 version = "0.4.0"
 description = "MAXENG Data Onboarding Harness"
 requires-python = ">=3.12"
+license = { file = "LICENSE" }
+classifiers = [
+    # Not a real classifier. PyPI rejects unknown classifiers, so this makes an
+    # accidental `twine upload` fail instead of publishing a proprietary repo
+    # that carries tr-core. Do not remove without a deliberate decision to
+    # publish, and do not "fix" it to a valid classifier.
+    "Private :: Do Not Upload",
+]
 dependencies = [
     "polars>=0.20.0",
     "duckdb>=0.10.0",
