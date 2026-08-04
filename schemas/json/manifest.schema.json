@@ -95,27 +95,49 @@
       "title": "EgressConfig",
       "type": "object"
     },
+    "GovernanceConfig": {
+      "description": "Declarations \u00a76.2.2 requires be *present*, not proven (\u00a76.2.2, 0.5.4).\n\nBoth fields below back **declaration-class** checks: preflight verifies that\na commitment was made and does not test whether it holds. That is not a\nweakness to be fixed later by validating the strings \u2014 a DPA reference is a\npointer into contract work that lives outside this repository, and a restore\npoint cannot be exercised by a tool holding no standing access (P9). What\nthe check buys is that the commitment cannot be *absent* and unnoticed.",
+      "properties": {
+        "dpa_ref": {
+          "description": "Reference to the executed DPA/KV\u0130S for this engagement \u2014 a contract id or document reference, never the document itself (\u00a72.1 L1).",
+          "minLength": 1,
+          "title": "Dpa Ref",
+          "type": "string"
+        },
+        "restore_point": {
+          "description": "The client-side restore point or snapshot this run can be rolled back to (\u00a76.2.2 capacity). Declared by the client; its existence is not verified by the Harness.",
+          "minLength": 1,
+          "title": "Restore Point",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dpa_ref",
+        "restore_point"
+      ],
+      "title": "GovernanceConfig",
+      "type": "object"
+    },
     "PreflightConfig": {
       "properties": {
         "sample_limit": {
           "default": 200,
+          "exclusiveMinimum": 0,
           "title": "Sample Limit",
           "type": "integer"
         },
         "freshness_window_hours": {
           "default": 48,
+          "exclusiveMinimum": 0,
           "title": "Freshness Window Hours",
           "type": "integer"
         },
         "row_count_bounds": {
-          "additionalProperties": {
-            "type": "integer"
-          },
-          "title": "Row Count Bounds",
-          "type": "object"
+          "$ref": "#/$defs/RowCountBounds"
         },
         "estimated_run_minutes": {
           "default": 45,
+          "exclusiveMinimum": 0,
           "title": "Estimated Run Minutes",
           "type": "integer"
         },
@@ -124,6 +146,27 @@
         }
       },
       "title": "PreflightConfig",
+      "type": "object"
+    },
+    "RowCountBounds": {
+      "description": "Declared row count envelope for the bound source (\u00a76.2.2).\n\nTyped rather than left as `dict[str, int]`, which accepted `{}` and\n`{\"foo\": 5}` and made the volume check a comparison against nothing. A\nblocker that silently has no bounds to compare against is the failure mode\nthis repo keeps finding, so the bounds are a model with a validator.",
+      "properties": {
+        "min": {
+          "minimum": 0,
+          "title": "Min",
+          "type": "integer"
+        },
+        "max": {
+          "exclusiveMinimum": 0,
+          "title": "Max",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ],
+      "title": "RowCountBounds",
       "type": "object"
     },
     "SourceBinding": {
@@ -242,6 +285,7 @@
         },
         "retention_days": {
           "default": 90,
+          "exclusiveMinimum": 0,
           "title": "Retention Days",
           "type": "integer"
         }
@@ -308,6 +352,9 @@
     "target": {
       "$ref": "#/$defs/TargetConfig"
     },
+    "governance": {
+      "$ref": "#/$defs/GovernanceConfig"
+    },
     "preflight": {
       "$ref": "#/$defs/PreflightConfig"
     },
@@ -337,7 +384,8 @@
     "sources",
     "bronze",
     "audit",
-    "target"
+    "target",
+    "governance"
   ],
   "title": "Manifest",
   "type": "object"

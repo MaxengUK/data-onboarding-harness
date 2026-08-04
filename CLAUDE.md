@@ -428,6 +428,10 @@ target:
   quarantine: staging.quarantine
   retention_days: 90
 
+governance:                         # declaration-class checks read these (§6.2.2)
+  dpa_ref: KVIS-2026-TEKBAS-014     # a reference, never the document
+  restore_point: dms-snapshot-nightly
+
 preflight:
   sample_limit: 200                 # rows read for encoding/format checks, discarded after
   freshness_window_hours: 48

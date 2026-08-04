@@ -81,7 +81,62 @@ class TargetConfig(BaseModel):
     canonical: str
     staging: str
     quarantine: str
-    retention_days: int = 90
+    #: `gt=0` to match `BronzeConfig.retention_days`. Quarantine holds raw
+    #: violating records (§6.1), so a zero or negative retention is the same
+    #: category of undeclared-lifetime problem, and the §6.2.2 governance check
+    #: "quarantine retention target defined" has nothing to affirm without it.
+    retention_days: int = Field(90, gt=0)
+
+
+class RowCountBounds(BaseModel):
+    """Declared row count envelope for the bound source (§6.2.2).
+
+    Typed rather than left as `dict[str, int]`, which accepted `{}` and
+    `{"foo": 5}` and made the volume check a comparison against nothing. A
+    blocker that silently has no bounds to compare against is the failure mode
+    this repo keeps finding, so the bounds are a model with a validator.
+    """
+
+    min: int = Field(ge=0)
+    max: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def min_not_above_max(self) -> "RowCountBounds":
+        if self.min > self.max:
+            raise ValueError(
+                f"row_count_bounds.min ({self.min}) exceeds max ({self.max}): "
+                f"no row count can satisfy this envelope, so every run would "
+                f"fail the volume check for a reason the manifest created"
+            )
+        return self
+
+
+class GovernanceConfig(BaseModel):
+    """Declarations §6.2.2 requires be *present*, not proven (§6.2.2, 0.5.4).
+
+    Both fields below back **declaration-class** checks: preflight verifies that
+    a commitment was made and does not test whether it holds. That is not a
+    weakness to be fixed later by validating the strings — a DPA reference is a
+    pointer into contract work that lives outside this repository, and a restore
+    point cannot be exercised by a tool holding no standing access (P9). What
+    the check buys is that the commitment cannot be *absent* and unnoticed.
+    """
+
+    dpa_ref: str = Field(
+        min_length=1,
+        description=(
+            "Reference to the executed DPA/KVİS for this engagement — a contract "
+            "id or document reference, never the document itself (§2.1 L1)."
+        ),
+    )
+    restore_point: str = Field(
+        min_length=1,
+        description=(
+            "The client-side restore point or snapshot this run can be rolled "
+            "back to (§6.2.2 capacity). Declared by the client; its existence is "
+            "not verified by the Harness."
+        ),
+    )
 
 
 class ArmingConfig(BaseModel):
@@ -91,10 +146,12 @@ class ArmingConfig(BaseModel):
 
 
 class PreflightConfig(BaseModel):
-    sample_limit: int = 200
-    freshness_window_hours: int = 48
-    row_count_bounds: dict[str, int] = Field(default_factory=lambda: {"min": 1, "max": 10000000})
-    estimated_run_minutes: int = 45
+    sample_limit: int = Field(200, gt=0)
+    freshness_window_hours: int = Field(48, gt=0)
+    row_count_bounds: RowCountBounds = Field(
+        default_factory=lambda: RowCountBounds(min=1, max=10_000_000)
+    )
+    estimated_run_minutes: int = Field(45, gt=0)
     arming: ArmingConfig = Field(default_factory=ArmingConfig)
 
 
@@ -137,6 +194,10 @@ class Manifest(BaseModel):
     #: nowhere to go.
     audit: AuditConfig
     target: TargetConfig
+    #: Required with no default, like `bronze` and `audit`. A default would mean
+    #: the kernel supplying a DPA reference on the client's behalf, which is the
+    #: one thing a governance blocker must never be able to do.
+    governance: GovernanceConfig
     preflight: PreflightConfig = Field(default_factory=PreflightConfig)
     packs: list[str] = Field(default_factory=list)
     external_references: list[str] = Field(default_factory=list)

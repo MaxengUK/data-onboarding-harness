@@ -10,7 +10,14 @@ anything else noticing.
 import pytest
 from pydantic import ValidationError
 
-from schemas.manifest import AuditConfig, BronzeConfig, Manifest
+from schemas.manifest import (
+    AuditConfig,
+    BronzeConfig,
+    GovernanceConfig,
+    Manifest,
+    RowCountBounds,
+    TargetConfig,
+)
 
 BASE = {
     "engagement": "gate0-energy",
@@ -37,6 +44,10 @@ BASE = {
         "canonical": "staging.canonical",
         "staging": "staging.canonical_wip",
         "quarantine": "staging.quarantine",
+    },
+    "governance": {
+        "dpa_ref": "KVIS-2026-GATE0-001",
+        "restore_point": "scada-snapshot-nightly",
     },
 }
 
@@ -113,3 +124,44 @@ def test_bronze_format_admits_exactly_one_value() -> None:
 def test_evidence_only_cannot_be_switched_off() -> None:
     with pytest.raises(ValidationError, match="evidence is the only export"):
         manifest(egress={"evidence_only": False})
+
+
+# --- §6.2.2 declarations, added with preflight --------------------------------
+
+
+def test_the_governance_block_is_mandatory() -> None:
+    """No default: the kernel does not supply a DPA reference on the client's
+    behalf, which is the one thing a governance blocker must never do."""
+    without = {key: value for key, value in BASE.items() if key != "governance"}
+
+    with pytest.raises(ValidationError):
+        Manifest.model_validate(without)
+
+
+def test_a_blank_declaration_is_not_a_declaration() -> None:
+    """`min_length=1`, so an empty string cannot stand in for a commitment."""
+    for field in ("dpa_ref", "restore_point"):
+        blank = dict(BASE["governance"]) | {field: ""}
+
+        with pytest.raises(ValidationError):
+            GovernanceConfig.model_validate(blank)
+
+
+def test_row_count_bounds_reject_what_the_dict_form_accepted() -> None:
+    """The untyped `dict[str, int]` accepted `{}` and `{"foo": 5}`, which made
+    the volume blocker a comparison against nothing."""
+    for rejected in ({}, {"foo": 5}, {"min": 10}):
+        with pytest.raises(ValidationError):
+            RowCountBounds.model_validate(rejected)
+
+
+def test_row_count_bounds_reject_an_impossible_envelope() -> None:
+    with pytest.raises(ValidationError, match="no row count can satisfy"):
+        RowCountBounds.model_validate({"min": 500, "max": 100})
+
+
+def test_quarantine_retention_must_be_positive() -> None:
+    """Quarantine holds raw violating records (§6.1), so an undeclared lifetime
+    is the same problem `BronzeConfig.retention_days` already guards against."""
+    with pytest.raises(ValidationError):
+        TargetConfig.model_validate(BASE["target"] | {"retention_days": 0})
