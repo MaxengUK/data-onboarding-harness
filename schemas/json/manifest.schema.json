@@ -28,7 +28,14 @@
     "BronzeConfig": {
       "properties": {
         "location": {
+          "description": "A path abstraction, not a local path (\u00a74.2.2). Resolved by kernel.storage.resolve_location; local FS, S3 and Azure Blob are equally valid, though only local is implemented in this build.",
           "title": "Location",
+          "type": "string"
+        },
+        "format": {
+          "const": "parquet",
+          "default": "parquet",
+          "title": "Format",
           "type": "string"
         },
         "partition_by": {

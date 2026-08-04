@@ -21,7 +21,27 @@ class SourceConfig(BaseModel):
 
 
 class BronzeConfig(BaseModel):
-    location: str
+    location: str = Field(
+        description=(
+            "A path abstraction, not a local path (§4.2.2). Resolved by "
+            "kernel.storage.resolve_location; local FS, S3 and Azure Blob are "
+            "equally valid, though only local is implemented in this build."
+        )
+    )
+    #: Pinned, not a toggle (§4.2.1). The key exists so a future second substrate
+    #: can be added without a schema shape change, and today exactly one value
+    #: loads. It must never be widened to a free string "for flexibility": a
+    #: configurable format field advertises that other formats work, and §4.2.1's
+    #: three arguments — the content hash, portability, schemalessness — say they
+    #: do not.
+    #:
+    #: `Literal` rather than the `egress.evidence_only` treatment (a bool with a
+    #: validator that refuses False) because the two differ in what a second
+    #: value would mean. A second egress mode would need its own gate, so the
+    #: field stays open and the refusal is behavioural. A second Bronze format is
+    #: a new substrate implementation; until one exists there is nothing for the
+    #: type to admit, and `Literal` says exactly that at the type level.
+    format: Literal["parquet"] = "parquet"
     partition_by: str = "batch_id"
     retention_days: int = Field(..., gt=0, description="Mandatory — preflight fails if unset")
 
