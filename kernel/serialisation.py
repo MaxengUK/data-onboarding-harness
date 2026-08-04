@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 
 import polars as pl
 
@@ -81,6 +82,24 @@ def serialise_parquet(frame: pl.DataFrame) -> bytes:
 def deserialise_parquet(data: bytes) -> pl.DataFrame:
     """Read a frame back from bytes already fetched and verified by a store."""
     return pl.read_parquet(io.BytesIO(data))
+
+
+def canonical_json_bytes(payload: object) -> bytes:
+    """Deterministic bytes for a JSON-able value, for hashing rather than reading.
+
+    Sorted keys and the tightest separators, so the bytes are a function of the
+    *content* and not of field declaration order, dict insertion order, or
+    whichever pretty-printer last touched the value. `ensure_ascii` keeps the
+    output byte-identical regardless of the host's default encoding — the same
+    hazard that made the JSON Schema exporter write CRLF on one platform and LF
+    on another.
+
+    Not the same job as `schemas/export_json_schema.render_schema`, which is
+    indented and read by humans. This output is hashed and never displayed.
+    """
+    return json.dumps(
+        payload, sort_keys=True, ensure_ascii=True, separators=(",", ":")
+    ).encode("utf-8")
 
 
 def content_hash(data: bytes) -> str:

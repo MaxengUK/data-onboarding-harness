@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from kernel.stages.preflight.digest import PreflightDigest
 from kernel.stages.preflight.result import (
     Category,
     CheckClass,
@@ -44,6 +45,8 @@ class PreflightReport(BaseModel):
     model_config = {"frozen": True}
 
     results: tuple[CheckResult, ...]
+    digest: PreflightDigest | None = None
+    digest_gap: str = ""
 
     @property
     def blocking(self) -> tuple[CheckResult, ...]:
@@ -52,14 +55,19 @@ class PreflightReport(BaseModel):
 
     @property
     def verdict(self) -> Verdict:
-        """§6.2.3: `ready` means every blocker passed.
+        """§6.2.3: `ready` means every blocker passed **and a digest exists**.
 
-        Note what this does *not* consult: how many checks ran, how many are
-        implemented, or whether the unpassed ones look important. A blocker that
-        did not run is indistinguishable here from one that failed, which is the
-        point — in both cases nothing was verified.
+        Note what the first half does *not* consult: how many checks ran, how
+        many are implemented, or whether the unpassed ones look important. A
+        blocker that did not run is indistinguishable here from one that failed,
+        which is the point — in both cases nothing was verified.
+
+        The digest is the second half because arming binds to it (§6.2.3 rule
+        1). A `ready` with no digest would be a verdict nothing could be
+        approved against, and the only way to use it would be to approve against
+        something weaker — which is the failure the rule exists to prevent.
         """
-        return Verdict.BLOCKED if self.blocking else Verdict.READY
+        return Verdict.BLOCKED if self.blocking or self.digest is None else Verdict.READY
 
     @property
     def warnings(self) -> tuple[CheckResult, ...]:
@@ -110,6 +118,17 @@ def render_report(report: PreflightReport) -> str:
             )
             lines.append(f"  {mark}  {result.check_id} [{result.severity.value}]{note}")
             lines.append(f"        {result.detail}")
+        lines.append("")
+
+    if report.digest is None:
+        lines.append("NO PREFLIGHT DIGEST — nothing can be armed against this run")
+        lines.append(f"  {report.digest_gap}")
+        lines.append("")
+    else:
+        lines.append(f"DIGEST {report.digest.value}")
+        lines.append(
+            "  covers: " + ", ".join(component.value for component in report.digest.covers)
+        )
         lines.append("")
 
     if report.blocking:

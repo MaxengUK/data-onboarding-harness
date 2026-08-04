@@ -12,6 +12,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from kernel.stages.preflight.digest import (
+    DigestIncomplete,
+    PreflightDigest,
+    compute_digest,
+)
 from kernel.stages.preflight.registry import IMPLEMENTATIONS, REGISTRY, CheckSpec
 from kernel.stages.preflight.report import PreflightReport
 from kernel.stages.preflight.result import CheckResult, CheckStatus
@@ -98,6 +103,26 @@ def run_checks(context: CheckContext) -> tuple[CheckResult, ...]:
     return tuple(results)
 
 
-def run_preflight(manifest: Manifest) -> PreflightReport:
-    """Run preflight against `manifest` and return the Preflight Report."""
-    return PreflightReport(results=run_checks(CheckContext(manifest=manifest)))
+def run_preflight(manifest: Manifest, *, kernel_version: str) -> PreflightReport:
+    """Run preflight against `manifest` and return the Preflight Report.
+
+    `kernel_version` is a required keyword with no default, for the reason
+    `RunManifest` requires one: it enters the digest an approval is bound to, so
+    a guessed value would bind an approval to a version nobody shipped.
+    """
+    context = CheckContext(manifest=manifest)
+    results = run_checks(context)
+
+    digest: PreflightDigest | None = None
+    digest_gap = ""
+    try:
+        digest = compute_digest(
+            manifest,
+            kernel_version=kernel_version,
+            source_schema=None,
+            row_count=None,
+        )
+    except DigestIncomplete as exc:
+        digest_gap = str(exc)
+
+    return PreflightReport(results=results, digest=digest, digest_gap=digest_gap)
