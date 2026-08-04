@@ -48,7 +48,11 @@ from tests.synthetic import find_valid_tckn, synthetic_local_msisdn
 
 RUN_ID = "run-2026-08-04-0001"
 PARTITION = "20260804T093000Z-a1b2c3d4"
-KERNEL_VERSION = "0.5.2"
+KERNEL_VERSION = "0.4.0"
+#: Deliberately not equal to KERNEL_VERSION. The two version each other's
+#: business — code and constitutional decisions — and advance independently
+#: (§12), so a fixture that set them equal would make a lockstep bug invisible.
+SPEC_VERSION = "0.5.3"
 
 
 def digest(value: str) -> str:
@@ -76,7 +80,10 @@ def raw_frame() -> pl.DataFrame:
 
 def empty_manifest(run_id: str = RUN_ID) -> RunManifest:
     return RunManifest(
-        run_id=run_id, kernel_version=KERNEL_VERSION, manifest_hash=digest("manifest")
+        run_id=run_id,
+        kernel_version=KERNEL_VERSION,
+        spec_version=SPEC_VERSION,
+        manifest_hash=digest("manifest"),
     )
 
 
@@ -274,6 +281,57 @@ def test_the_manifest_is_frozen() -> None:
 
     with pytest.raises(ValidationError):
         manifest.run_id = "run-something-else-0002"
+
+
+# --- two versions, both required ----------------------------------------------
+
+
+def test_neither_version_may_be_omitted() -> None:
+    """A run that cannot say which code produced it, or which rules that code was
+    written against, is not identifiable after the fact (§12).
+
+    Both are asserted, and separately: a single test that dropped both fields
+    would pass with either one of them still optional.
+    """
+    complete = {
+        "run_id": RUN_ID,
+        "kernel_version": KERNEL_VERSION,
+        "spec_version": SPEC_VERSION,
+        "manifest_hash": digest("manifest"),
+    }
+
+    for omitted in ("kernel_version", "spec_version"):
+        partial = {key: value for key, value in complete.items() if key != omitted}
+
+        with pytest.raises(ValidationError, match=omitted):
+            RunManifest.model_validate(partial)
+
+    assert RunManifest.model_validate(complete).spec_version == SPEC_VERSION
+
+
+def test_the_two_versions_are_independent_fields() -> None:
+    """Not one value read twice, and not required to match (§12).
+
+    A kernel release against an unchanged spec, and a spec change no code has
+    caught up with, are both ordinary states — so nothing may quietly couple
+    them.
+    """
+    manifest = empty_manifest()
+
+    assert manifest.kernel_version != manifest.spec_version
+    assert manifest.kernel_version == KERNEL_VERSION
+    assert manifest.spec_version == SPEC_VERSION
+
+
+def test_extending_a_manifest_preserves_both_versions(tmp_path: Path) -> None:
+    """`with_*` rebuilds through the constructor, so a field added to the model
+    and forgotten there would be silently dropped from every extended manifest."""
+    ref = write_one_segment(audit_location(tmp_path))
+
+    extended = empty_manifest().with_audit_segments([ref])
+
+    assert extended.kernel_version == KERNEL_VERSION
+    assert extended.spec_version == SPEC_VERSION
 
 
 # --- the boundary -------------------------------------------------------------
