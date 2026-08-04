@@ -1,10 +1,11 @@
 # CLAUDE.md — MAXENG Data Onboarding Harness
 
 **Repo:** `data-onboarding-harness`
-**Version:** 0.4.1 (draft)
+**Version:** 0.5.0 (draft)
 **Status:** Pre-Gate 0
 **Owner:** MAXENG
 **Changelog:**
+0.5.0 — **Bronze substrate is decided, and the audit store becomes a first-class repository.** Not a correction: 0.4.0 made Bronze a core concept but left its physical shape open, and every remaining question — how §12 computes a content hash, what the OCI image is allowed to require of a client environment, where `AuditRecord` lands — was blocked on that one decision. §4.2 now commits: Bronze is **columnar files (Parquet)** addressed through a **path abstraction** (local FS, S3, Azure Blob equally valid), not database tables. This is a binding architectural commitment that constrains deployment — it is the difference between a harness that installs itself and one that arrives with an infrastructure prerequisite — so it is versioned as a minor, not a patch. Three consequences are written down with it: immutability is enforced as **tamper-evidence, not tamper-prevention**, in three layers (single-writer API, read-only filesystem as a speed bump, content hash as the actual enforcement, failing with `BronzeIntegrityError`); re-ingest of the same source is **always a new partition**, never an overwrite; and the **audit store** is a separate append-only store *beside* Bronze, because `AuditRecord`s are produced by `normalize` and writing them into Bronze would be a post-`ingest` write to Bronze and a direct P10 violation. Bronze holds *what arrived*; the audit store holds *what we did*. Its retention is floored at Bronze's (`audit.retention_days` ≥ `bronze.retention_days`, a §6.2.2 blocker): an audit store that expires first leaves the data present with no account of what was done to it, which is P8 failing silently on a date nobody chose. Downstream is explicitly not bound: Silver/Gold go wherever the client's consumers are. Two Gate 0 criteria added (§15).
 0.4.1 — **B5 — evidence/audit name collision.** §8 and §12 both said "evidence" while describing different artifacts, which made §12's per-record pre-image hash read as a direct contradiction of §8's denial of PII-typed hashes. They were never the same object. Split explicitly: the **evidence artifact** is aggregate, governed by §8, and is the only thing that crosses the boundary; the **audit record** is per-record, holds pre-image hashes, and stays inside it (§12). No keyed hashing or key management is required — the contradiction was nominal. Two further §8 corrections ride along: **field-value hashes are denied outright**, replacing a low-cardinality threshold that measured the wrong quantity (cardinality is a property of the dataset, reversibility a property of the value space), leaving only artifact-level content hashes; and the permitted list now names kernel-owned closed vocabularies explicitly, permitted because MAXENG owns the word list rather than because they are enums.
 0.4.0 — **Bronze is now a core concept** (§4.2, P10): raw input is landed immutably inside the boundary and every downstream stage reads Bronze, never the source. One-shot operation is a single-batch special case of this. Closes the pre-image contradiction, makes the replay guarantee actually achievable, and fixes atomic emit (§6.3), arming modes (§6.2.3), and the Gate 1 signature metric (§13). Adds the GX result-format egress guard (§8) and the OpenRefine boundary rule (§0).
 0.3.0 — added §0 agent operating rules, §6.2 source binding / preflight / arming (the ready gate), and §7.5 predicate and semantic type registries. Preflight is now the pipeline entry point; no run starts without an attributable, digest-bound approval.
@@ -27,6 +28,9 @@ Read before any code change in this repository. These are imperative; the rest o
 - Generate realistic-looking Turkish identifiers in fixtures. Use documented invalid ranges: checksum-failing TCKN/VKN, reserved MSISDN blocks, non-existent province codes.
 - Delete a record in any stage. Quarantine it.
 - Read a source system from any stage after `ingest`. Everything downstream reads Bronze (§4.2).
+- Add an `overwrite` parameter — or any mutating method — to the Bronze or audit store modules. A second write to an existing partition id is an error, not an option (§4.2.4, §4.2.5).
+- Write an `AuditRecord` into a Bronze partition. The audit store is a separate store; writing to Bronze after `ingest` is a P10 violation (§4.2.6).
+- Address Bronze with `os.path`, `pathlib.Path`, or a bare `open()`. Go through the path abstraction — the target may be an object store (§4.2.2).
 - Put OpenRefine — or any interactive wrangling tool — in the delivery path. It is a discovery workstation only; its operation history compiles into a draft pack, and the pack is what executes.
 - Add a field to the evidence schema without updating the §8 allowlist and both legs of the §8.2 leak test in the same change.
 
@@ -158,6 +162,71 @@ This is not a storage detail. Four things depend on it:
 
 **Bronze is client-owned and retention-bound.** It holds raw personal data by construction, so `bronze.retention_days` is mandatory in the manifest and preflight fails if it is unset. The Harness creates the store; the client owns it, and the retention policy is the client's declaration, not a MAXENG default.
 
+#### 4.2.1 Storage substrate — columnar files, not database tables
+
+**Bronze is Parquet files.** Not a table in the client's warehouse, not a schema the Harness creates in a database it was pointed at. Three reasons, and each of them is load-bearing:
+
+**The §12 content hash.** A file's content hash is its bytes — read them, hash them, done. A *table* has no bytes to hash. Computing a "content hash" of a table means scanning it and canonicalising the result first: fixing row order, fixing type rendering, fixing NULL representation, fixing float formatting, fixing how the driver decided to hand back a `NUMERIC`. Every one of those is a decision that can differ between two runs, two driver versions, or two engine releases. So making a table hashable requires solving a fresh determinism problem *in order to* deliver the determinism guarantee — the mechanism intended to prove P2 would itself become a source of P2 violations. Files skip the problem rather than solving it.
+
+**Portability.** The Harness ships as an OCI image into client environments it has never seen, and it stands up its own store (§4.2, "the Harness creates the store"). Requiring a database makes that store an *infrastructure prerequisite*: a provisioned instance, a schema, a DDL grant, a DBA in the loop, and a negotiation before the first byte lands. Files need a writable location. That is the difference between a tool that installs itself in an afternoon and one that starts with a ticket to the client's platform team.
+
+**This is a decision, not a configuration point.** `bronze.format` is typed `Literal["parquet"]`: the key exists so that a future second substrate could be added without a schema shape change, and today exactly one value loads. It is not a toggle, and it must never be widened to a free string "for flexibility" — a configurable format field advertises that other formats work, and the three arguments above say they do not. This is the same pattern as `egress.evidence_only`, and for the same reason: a setting that cannot be honoured must fail at load time rather than present itself as available.
+
+**Schemalessness.** Bronze holds raw input as it arrived — broken types, columns that disagree with the header, mixed date formats, encoding garbage, a numeric column with `"N/A"` in it. That is not a defect of Bronze; it is Bronze's job (P10: raw input is landed *once, unmodified*). A substrate that enforces a schema fights this by design: it will reject the row, coerce it, or NULL it, and any of those three destroys the pre-image that §4.2 exists to preserve. Typing is Silver's problem, and it is a problem Silver is allowed to fail loudly at. Bronze must never be in a position to refuse data because it did not like the shape of it.
+
+#### 4.2.2 Path abstraction — the location is not a local path
+
+**Bronze does not assume a local filesystem.** Local FS, S3, and Azure Blob are equally valid targets, and none of them is the default that the others are exceptions to. `bronze.location` is a **path abstraction**, not a `Path` constant: the kernel addresses Bronze through an object-store-capable path type and never through direct `open()` calls or OS path arithmetic. Preflight verifies that the declared location is reachable and writable through that abstraction, whichever backend it resolves to.
+
+This follows directly from §4.2.1's portability argument. A store that only works on a mounted disk reintroduces the infrastructure prerequisite it was chosen to remove, in a different form — the client environment is as likely to be a bucket as a volume.
+
+#### 4.2.3 Downstream is not bound by this
+
+**Bronze being files does not determine Silver or Gold.** Canonical output goes wherever the client's consumers are — a warehouse table, an object store, a lakehouse — because the point of the canonical output is to be *read by the client's existing tooling*, and that tooling is wherever it already is. The Bronze substrate decision is about the Harness's own store, and it generalises no further than that.
+
+§6.3's atomic swap is therefore **implemented per target substrate**, not once: an atomic rename on a filesystem, a multipart-commit or manifest swap on object storage, a transactional `ALTER TABLE ... RENAME` or view repoint in a warehouse. The *guarantee* is invariant — a run that dies before publication leaves the previously published state untouched — and the mechanism is a property of the target. An adapter that cannot offer a genuine atomic swap on its target cannot be used as a target.
+
+**A Bronze location and a publication target are held to different requirements, and neither implies the other.** Bronze needs an addressable, writable location that can hold immutable partitions and return their bytes for hash verification (§4.2.5); a target needs an atomic swap (§6.3). §4.2.2 admitting S3 as a Bronze location is therefore not a statement that S3 is admissible as a Silver or Gold target — object stores have no atomic rename, so a target adapter over one must supply the swap by some other means (a manifest or catalog pointer flip) and is judged on whether it genuinely does. Read §4.2.2 as scoped to Bronze, which is what it says.
+
+#### 4.2.4 Partition identity — re-ingest is always a new partition
+
+**Re-ingesting the same source is always a new partition, never an overwrite.** There is no path — no flag, no manifest key, no operational circumstance — by which a second read of the same source lands on top of a first. A re-run after a failure, a corrected extract, a backfill, and a scheduled batch that happened to read unchanged rows all produce distinct partitions.
+
+This is what makes §12 replay meaningful. A run manifest names the partition ids it read; if a partition id could be rewritten, that name would identify a location rather than a content, and "replay against the same Bronze partitions" would be a statement about where the bytes were, not which bytes they were.
+
+#### 4.2.5 Enforcing immutability — tamper-evidence, not tamper-prevention
+
+Be exact about what can be enforced here, because the honest answer shapes the design. §4.2 says Bronze is **client-owned**: the client's disk, the client's permissions, the client's administrators. The Harness cannot prevent modification of a store it does not control, and any design that assumes otherwise is assuming away the ownership model the whole architecture rests on.
+
+So enforcement here means **tamper-evidence, not tamper-prevention**. The goal is not to make Bronze unmodifiable — that is not achievable and pretending it is would be worse than not trying. The goal is to make it **impossible to operate on modified Bronze without knowing**. A client who edits a partition is within their rights; a run that consumes an edited partition and reports a clean result is not.
+
+Three layers, in ascending order of how much weight they carry:
+
+**1 — API.** The Bronze module exposes a single write path. `write_partition()` **errors if the partition already exists**; there is **no `overwrite` parameter**, and adding one is a §0 violation, not a feature request. No method in the Bronze module mutates an existing partition — no update, no append-into, no delete, no compaction-in-place. The module's surface simply does not contain the operation, which is a stronger statement than a flag defaulting to off.
+
+**2 — Filesystem.** Partitions are set read-only after write. This is a **speed bump, not a wall**, and the spec says so plainly so that nobody later mistakes it for the control: root overrides it, container bind mounts and overlay filesystems handle permission bits inconsistently, and network filesystems and object stores implement them with varying fidelity or not at all. It catches an accidental `rm` and a careless script. **Nothing may depend on it.**
+
+**3 — Content hash.** This is the actual enforcement. The partition's content hash is recorded at write time into the run manifest (§12). **Every stage that reads Bronze verifies the hash before reading**, on every read, not once per run and not on a sample. A mismatch raises **`BronzeIntegrityError`** and **fails the run** — it is not a warning, it is not recoverable by acknowledgement, and there is no flag that downgrades it (§0: blockers are not overridable).
+
+The verification is what converts an unenforceable ownership constraint into an enforceable operational one. The client retains every power they had over their own disk; what they lose is the ability to have the Harness quietly process the result.
+
+#### 4.2.6 The audit store — beside Bronze, not inside it
+
+`AuditRecord`s (§12) are produced by `normalize` — which is to say **after `ingest`**. Writing them into Bronze would therefore be a write to Bronze after ingest, which is a direct P10 violation and also breaks §4.2.4's partition identity: a partition whose contents grow as later stages run has no stable content hash, and §4.2.5 layer 3 collapses.
+
+The audit store is therefore a **separate store, parallel to Bronze**:
+
+- **Append-only**, like Bronze.
+- **Subject to the same three-layer discipline** of §4.2.5 — single write path with no overwrite parameter, read-only after write, content hash verified on read.
+- **Bound by the same in-boundary constraint.** It holds per-record pre-image hashes over PII-typed fields by construction, so it never crosses the boundary and the egress gate refuses it structurally (§8 scope table).
+- **Retained at least as long as Bronze.** `audit.retention_days` must be **≥ `bronze.retention_days`**, checked by preflight as a blocker (§6.2.2).
+
+The retention constraint is not tidiness, it is P8. The two stores answer a question jointly: Bronze produces the pre-image, the audit record says which transform and which rule id put it in its current state. If the audit store expires first, there is a window in which the data is still there and the account of what was done to it is not — and "the client can always tell what happened to a record" becomes false for every record in that window, silently, at a date nobody chose deliberately. The failure is worse than losing both, because the surviving Bronze partition makes the system look intact.
+
+The constraint is one-directional. Audit outliving Bronze is fine and often correct: the audit record holds no source values, only hashes, rule ids and transform names, so keeping it after the raw data is gone leaves a lawful account of processing without extending the life of the personal data itself. What is forbidden is the reverse.
+
+The division is clean and worth stating as a slogan, because it settles most future "where does this go" questions on its own: **Bronze holds what arrived; the audit store holds what we did to it.** Neither is derivable from the other, and neither belongs inside the other.
+
 ---
 
 ## 5. Repository layout
@@ -167,7 +236,8 @@ data-onboarding-harness/
 ├─ CLAUDE.md                     # this document
 ├─ kernel/
 │  ├─ stages/                    # preflight, ingest, profile, map, normalize, validate, resolve, emit
-│  ├─ bronze/                    # immutable landing store, partitioning, pre-image lookup
+│  ├─ bronze/                    # immutable Parquet landing store, path abstraction, partitioning, pre-image lookup, hash verification
+│  ├─ audit/                     # append-only per-record audit store (§4.2.6) — in-boundary, never exported
 │  ├─ gates/                     # egress_gate.py, llm_gate.py, deid_gate.py
 │  ├─ evidence/                  # emitter + schema-constrained serializer
 │  ├─ adapters/                  # gx.py, soda.py, splink.py, presidio.py
@@ -241,7 +311,7 @@ Grouped by category. Each check declares a severity: `blocker` stops the run, `w
 | **Encoding & locale** | Declared encoding actually decodes the source without replacement characters; collation consistent; declared locale matches observed date and decimal shapes | blocker |
 | **Volume & freshness** | Non-empty; row count within declared bounds; max timestamp within the freshness window; no sign of a truncated extract | blocker for empty/truncated, warning otherwise |
 | **Packs & rules** | All declared packs resolvable at declared versions; every referenced predicate exists in the registry; every `applies_to.semantic_type` resolves; no `pass_through`-corroborated rule above the `client` layer (§9.6) | blocker |
-| **Governance** | DPA reference recorded; sub-processor register current; every external reference declares a `license_mode`; quarantine retention target defined | blocker |
+| **Governance** | DPA reference recorded; sub-processor register current; every external reference declares a `license_mode`; quarantine retention target defined; `audit.retention_days` ≥ `bronze.retention_days` (§4.2.6) | blocker |
 | **Capacity & recoverability** | Space for output and quarantine; a client-side restore point or snapshot exists; egress allowlist version pinned; kill switch reachable | blocker for restore point, warning otherwise |
 
 The undeclared-PII check deserves its own note: without it, a column nobody mapped still reaches `profile`, and its statistics reach the evidence artifact. Preflight is the only place that gap closes.
@@ -324,9 +394,14 @@ sources:
       "Müşteri GSM": customer_msisdn
 
 bronze:
-  location: staging.bronze
+  location: s3://tekbas-harness/bronze   # path abstraction — local FS, S3, Azure Blob (§4.2.2)
+  format: parquet                        # Literal["parquet"] — pinned, not a toggle (§4.2.1)
   partition_by: batch_id
-  retention_days: 365               # mandatory — preflight fails if unset
+  retention_days: 365                    # mandatory — preflight fails if unset
+
+audit:
+  location: s3://tekbas-harness/audit    # parallel store, never Bronze (§4.2.6)
+  retention_days: 365
 
 target:
   kind: schema
@@ -576,7 +651,7 @@ Every run emits a **run manifest**: kernel version, resolved pack versions, mani
 
 A run is replayable if and only if the same run manifest, replayed against the same Bronze partitions, reproduces byte-identical output. `tests/` includes a replay assertion that runs twice and diffs. Non-determinism is a build failure, not a warning. Replay reads Bronze, never the source — a live source moves, and a guarantee that depends on it re-reading identically is not a guarantee.
 
-Normalization is reversible because Bronze holds the pre-image. Every applied transform records the pre-image hash in **the audit record** (`schemas/audit.py`) — the per-record, in-boundary artifact — and the value itself is recoverable from the Bronze partition inside the boundary. The hash proves which value it was; Bronze produces it.
+Normalization is reversible because Bronze holds the pre-image. Every applied transform records the pre-image hash in **the audit record** (`schemas/audit.py`) — the per-record, in-boundary artifact, written to the audit store beside Bronze and never into it (§4.2.6) — and the value itself is recoverable from the Bronze partition inside the boundary. The hash proves which value it was; Bronze produces it.
 
 That hash never appears in the exported evidence artifact. Pre-image hashes are taken over PII-typed fields by construction, which §8 denies in anything crossing the boundary; the audit record exists precisely so that P8's "the client can always tell what happened to a record" is satisfied without weakening §8. See the scope table at the head of §8.
 
@@ -635,7 +710,7 @@ Deployment topology alone bounds nothing — an engineer holding a standing key 
 ## 15. Acceptance gates
 
 **Gate 0 — energy analytics (2 weeks).** Build kernel + `tr-core` where PII is absent and legal friction is minimal.
-Pass: end-to-end evidence artifact produced; **both legs of the §8.2 leak test green**; replay assertion green **against a fixed Bronze partition**; **no stage after `ingest` opens a source connection, verified by test**; **a run killed mid-`emit` leaves the previously published state byte-identical**; `kernel_churn` frozen at close; **zero MAXENG standing credentials present in the environment at close, verified by inspection, not by assertion**; reference adapters carry a declared `license_mode` and the loader rejects a deliberately mis-layered pack; **preflight blocks on each blocker category when fed a deliberately broken manifest, including unset `bronze.retention_days`, and a run attempted with a stale, expired, or digest-mismatched arming token refuses to start**.
+Pass: end-to-end evidence artifact produced; **both legs of the §8.2 leak test green**; replay assertion green **against a fixed Bronze partition**; **no stage after `ingest` opens a source connection, verified by test**; **a run killed mid-`emit` leaves the previously published state byte-identical**; `kernel_churn` frozen at close; **zero MAXENG standing credentials present in the environment at close, verified by inspection, not by assertion**; reference adapters carry a declared `license_mode` and the loader rejects a deliberately mis-layered pack; **preflight blocks on each blocker category when fed a deliberately broken manifest, including unset `bronze.retention_days`, and a run attempted with a stale, expired, or digest-mismatched arming token refuses to start**; **a partition whose bytes are modified on disk fails on read with `BronzeIntegrityError`**; **a second write to an existing partition id is refused**.
 
 **Gate 1 — dealership (2–3 weeks).** Port to the hardest data under the tightest constraint.
 Pass: `reuse_ratio` ≥ 0.50; `time_to_first_evidence` ≤ 8h; ≥ 40 rules in the `money` band; `signature_rate` ≥ 0.60 **and** `signed_coverage` ≥ 0.70; `kernel_churn` ≤ 5% of kernel LOC.
