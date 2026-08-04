@@ -1,6 +1,6 @@
 # STATUS — 4 August 2026
 
-**Reflects:** `CLAUDE.md` v0.5.3 · repo `MaxengUK/data-onboarding-harness` @ `0fd1d14`
+**Reflects:** `CLAUDE.md` v0.5.4 · repo `MaxengUK/data-onboarding-harness` @ `75a0226`
 **Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. `ingest`, `profile`, `normalize` and CLI wiring remain deliberately out of scope: what exists is the storage floor those stages will stand on, not the stages.
 **This is a living document.** Sections are updated in place as items close, not appended to. Where a section records a decision rather than a state, it says so.
 
@@ -16,7 +16,8 @@
 | 4a | Path abstraction (`kernel/storage`) + Bronze store (`kernel/bronze`) | 1.0 | ✅ Closed. 30 tests; each control verified by breaking it |
 | 4b | Audit store (`kernel/audit`) + `AuditConfig` + shared serialiser | 1.0 | ✅ Closed. 35 tests; each control verified by breaking it |
 | — | **Run manifest** (`kernel/run_manifest`) — unplanned, see §4b.3 | 0.5 | ✅ Closed. 13 tests |
-| 5–16 | Preflight, arming, walking skeleton, tr-core, discovery, Gate 0/1 | 26 | ⬜ Not started |
+| 5 | Preflight — all seven check categories | 2.0 | ◐ **Framework, digest, CLI and 10 of 29 checks.** All 29 registered; the other 19 block as `unavailable`. See §5a |
+| 6–16 | Arming, walking skeleton, tr-core, discovery, Gate 0/1 | 24 | ⬜ Not started |
 
 156 tests, all green. Three unplanned pieces have been added across the two sessions and each closed a real defect: guard hardening, the schema sync test, and now the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
 
@@ -33,9 +34,10 @@ The session's highest-value output. Each was invisible until code forced the que
 | — | **Exporter wrote CRLF on Windows, LF on Linux.** Same models, different bytes by machine — a silent P2 violation that `.gitattributes` masked from `git diff` entirely. | `newline="\n"` plus explicit trailing newline. Would never have been found by inspection |
 | — | **Cardinality threshold measured the wrong quantity.** Field-value hashes were gated on dataset cardinality, but reversibility depends on the size of the *value space*. An MSISDN column clears any plausible threshold while remaining trivially sweepable (~10⁹). | Field-value hashes denied outright. Only artifact-level content hashes survive. §8 wording corrected |
 | — | **The pre-commit hook was never installed.** `pre-commit run --all-files` had been reporting Passed the whole time — it runs the hook manually, not through git's commit path. | `pre-commit install`, then verified by observing an actual commit get **blocked** |
+| — | **`schemas/rule.py` and `schemas/pack.py` do not implement §7.2–§7.4.** Both predate the schemas the spec now describes and share almost nothing with them: no `applies_to`, `expression`, `repair` or `provenance`; a `layer: L1_structural…` enum that appears nowhere in CLAUDE.md; no pack `layer`, `overrides` or `corroborated_by`, which are exactly the fields §6.2.2's pack checks would need. | Not patched — closing it is BUILD-PLAN item 3, and a rule schema written before the predicate registry would be a third guess. Docstrings at the head of both files say they are not implementations and that no code may be written against them; preflight reports all four pack checks `unavailable` rather than binding to fields the spec does not recognise |
 | — | **§12 named no record for audit segment hashes.** §4.2.6 puts the audit store under §4.2.5's three layers, and layer 3 — the only one that carries weight — needs the expected hash held *outside* the store. §12's run manifest enumerated Bronze partitions and stopped there, so the control was mandated with nothing to enforce it from. | Run manifest records audit segment ids and content hashes beside Bronze's; an object it does not name is **unreadable**, not merely unrecorded. CLAUDE.md → 0.5.2 |
 
-**The pattern, now stable across seven findings:** every serious spec-level error was a *missing concept*, not a wording error — and each was found by trying to write the code, not by re-reading the document. B1 (Bronze), B5 (audit record) and the §12 omission are the same shape: a section that was internally coherent and silently depended on something no other section provided.
+**The pattern, now stable across eight findings:** every serious spec-level error was a *missing concept*, not a wording error — and each was found by trying to write the code, not by re-reading the document. B1 (Bronze), B5 (audit record) and the §12 omission are the same shape: a section that was internally coherent and silently depended on something no other section provided.
 
 **The corollary, learned three times today:** a control that passes proves nothing. The guard, the schema sync test, and the pre-commit hook each only earned trust when observed to *fail* where failure was correct.
 
@@ -179,6 +181,79 @@ That somewhere was named in §12 for Bronze and named nowhere for audit, which i
 **Deferred rather than defaulted:** pack versions, reference snapshot ids, the arming record, applied transforms. An `arming: ArmingRecord | None = None` would let a run emit a manifest with no arming record and still look complete — the silently-permissive failure mode this repo has already had to close once, in exactly this document.
 
 **`kernel/storage` was not changed, and that is the result.** Five of its six members served the second store unchanged. The sixth, `exists()`, still has no kernel caller — preflight's reachability check will likely be its first. The honest summary is that the abstraction was one member too wide, not one member too narrow.
+
+---
+
+## 5a. Built this session — preflight (item 5, partial by decision)
+
+`kernel/stages/preflight/` and `harness preflight`. 59 tests. **10 of §6.2.2's 29 checks are implemented**, and the other 19 are registered, `unavailable`, and blocking.
+
+**A gap inventory came before any code**, and it is what set the scope. Working through the seven categories check by check produced three kinds of gap, and keeping them apart is what stopped preflight from becoming half stub with nobody able to say which half:
+
+| Kind | Meaning | Example |
+|---|---|---|
+| **schema gap** | The manifest cannot *declare* the thing, so there is nothing to check | No column carries a semantic type; no credential expiry field |
+| **machinery gap** | A component that does not exist | No source adapter, no pack loader, no predicate registry |
+| **not applicable** | The check has no meaning for this binding | Collation, for a file source |
+
+**The largest single finding was that the manifest cannot bind a semantic type to a column.** §7.5 calls that binding the reuse mechanism and §13 measures `reuse_ratio` through it — and `column_map` is `dict[str, str]`, source name to canonical name, with nowhere for a type to live. The chain would continue through the canonical schema (`canonical_schema: automotive/sales_v2`), which has no artifact, no loader and no schema. Three §6.2.2 checks rest on that one gap. It was left open deliberately: it is item 3's, and closing it inside item 5 would have pulled half of item 3 along with it.
+
+### 5a.1 The design: the check list is data
+
+**All 29 checks are registered whether or not this build can run them**, and the runner walks the registry rather than the implementations. An id with no implementation is reached anyway and reported `UNAVAILABLE` with its registered severity intact, so a blocker that was never written blocks. The alternative — registering checks as they get implemented — makes the verdict a statement about how much of preflight got built, silently. That is the seventh time this repo has met that shape; here it is designed out rather than watched for.
+
+Four statuses, and the two that matter are the ones that are easy to confuse:
+
+- **`UNAVAILABLE`** — the check did not run, whether because nothing implements it or because a prerequisite failed. Both share the only property that counts: nothing was verified. Blocks at blocker severity.
+- **`NOT_APPLICABLE`** — the check has no meaning *for this manifest*, decided from a declared manifest fact and never from whether the code exists. Does not block. Exactly one check uses it today: collation, for a file binding.
+
+Keeping "not implemented" and "could not run" as one status is deliberate. Splitting them would invite a rule treating one as tolerable, and the pressure to write that rule would come from a real inconvenience — which is how a control gets softened.
+
+**Severity lives in the registry and nowhere else.** No manifest key, flag or environment variable moves a blocker to a warning, and the manifest is asserted to carry no severity-shaped key at all.
+
+### 5a.2 The digest refuses to be partial
+
+§6.2.3 rule 1 makes the digest **a claim about what would invalidate an approval**, so everything it omits is something a client approved without meaning to. A digest missing pack versions means a pack bump does not void arming — silently, precisely where the rule promises it would.
+
+So a digest is produced only when every component resolved, and it records the components it covers. Unresolved means **no digest and a blocked verdict**, not a shorter hash. Empty counts as resolved: a manifest declaring no packs has nothing to resolve.
+
+That vacuity is load-bearing rather than a loophole — it is what lets a file-source, pack-free manifest produce a complete digest while item 3 is open — so the check detail says "no packs declared, so there is nothing to resolve" rather than reporting a bare pass.
+
+### 5a.3 Verification class and declaration class
+
+`CLAUDE.md` 0.5.4. §6.2.2 listed "DPA reference recorded" beside "declared encoding actually decodes the source" as though they were one act. One measures an observable fact; the other confirms somebody made a written commitment.
+
+Both belong in preflight — a missing DPA reference must stop a run — but a client reading `restore point: passed` beside `encoding: passed` will reasonably conclude both were tested, and one was. Declaration-class rows now render with "declared, not verified" beside them. Three checks are declaration class: DPA reference, sub-processor register, restore point.
+
+This is not a placeholder for verification arriving later. Some facts are not observable from inside the client boundary by a tool holding no standing access (P9), and demanding a restore be *performed* before every run is not a control anyone would keep.
+
+### 5a.4 Where this build actually stands
+
+**Even the narrowest manifest cannot reach `ready`**, and a test asserts it. File source, no packs, no external references, every implemented check green — still blocked, by the 19 nothing implements. There is no flag that shortens that, which is the point.
+
+That is not a failure of item 5, it is item 5 reporting honestly. §6.2.4 sells preflight as the cheapest first contact with a client's data, answering "can this even be connected to, and what is missing" — a report that names its own gaps per check *is* that deliverable.
+
+**The break round found nothing wrong with the store this time**, which is worth recording because the previous two sessions both found the hole in a test rather than in the code. Five controls were broken and each was caught by the test that claimed it:
+
+| Break | Result |
+|---|---|
+| Delete a blocker from the registry | Id-set and blocker-set tests failed |
+| Demote a blocker to a warning | Blocker-set test failed |
+| `UNAVAILABLE` no longer blocks | Six tests failed, including the central one |
+| Quote the offending bytes in a check detail | Report leak test failed |
+| Drop `pack_versions` from the digest | Digest completeness test failed |
+
+The first is the one worth keeping in mind: **deleting a check is the quietest bypass of the entire gate.** It takes its blocker with it, the verdict goes green, and nothing else in the suite notices. The id set is pinned for that reason alone. Warning severities are deliberately not pinned — a warning becoming a blocker is a tightening, and the direction needing a guard rail is the one that makes a run easier to start.
+
+### 5a.5 Sequencing decision — item 3 is not pulled forward
+
+The walking skeleton (item 7) will run on a **minimal manifest**: file source, `packs: []`, no external references. Pack resolution is satisfied vacuously, the digest is complete, and the path to `ready` is open once the remaining blockers land — without item 3 moving ahead of item 5 in the plan.
+
+The alternative was to bring the predicate registry, the rule schema and the pack loader forward so that a realistic manifest could pass. Rejected: it would have made item 5 depend on the largest unbuilt piece in the plan, and the walking skeleton's job is to prove the *pipeline shape*, which a pack-free manifest proves as well as a pack-bearing one.
+
+### 5a.6 Not built, by decision
+
+`normalize`, retention and GC for either store, S3/Azure backends, arming (item 6), and the 19 unimplemented checks. Two smaller ones worth naming because they will be reached for: **`StoragePath` gained no members** — the source is read whole, inheriting the single-node ceiling §4a.1 already documents, and a `read_prefix(n)` is what the first remote backend or first genuinely large extract will force. And **`harness arm` now refuses loudly** rather than printing a success line; a gate that looks armed and authorises nothing is worse than an absent command.
 
 ---
 
