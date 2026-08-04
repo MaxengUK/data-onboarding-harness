@@ -37,9 +37,14 @@ mode this repo has already had to close once. Each lands with the stage that
 produces it — arming with BUILD-PLAN item 5, pack versions with the pack loader,
 applied transforms with `normalize`.
 
-**Not an evidence artifact.** Every field here happens to be §8-permitted — run
-id, kernel version, and artifact-level content hashes, which §8 names explicitly
-— but that is not why it does not cross the boundary. It does not cross because
+**Not an evidence artifact.** Nearly every field here is of a §8-permitted class
+— run id, kernel version, and artifact-level content hashes, all named
+explicitly — and `spec_version` is the one that is not: §8's allowlist names a
+kernel version and pack versions and stops there. That costs nothing today,
+because nothing here crosses; it is recorded so that anyone later tempted to put
+a spec version into the evidence artifact knows the allowlist and both legs of
+the §8.2 leak test have to move first (§0). Being §8-permitted was never why
+this type stays inside, though. It does not cross because
 P5 says evidence is the only export, and the egress gate refuses this type on
 sight for the reason it refuses any other non-`EgressModel`: it was not built by
 the emitter. Marking it `IN_BOUNDARY_ONLY` would be the reflexive mistake
@@ -100,7 +105,29 @@ class RunManifest(BaseModel):
     model_config = {"frozen": True}
 
     run_id: str
-    kernel_version: str
+    #: Two versions, and they are not interchangeable. Both are required and
+    #: neither has a default, because a run that cannot say which code produced
+    #: it or which rules that code was written against is not identifiable after
+    #: the fact — and a default would let it look identified while being neither.
+    kernel_version: str = Field(
+        description=(
+            "Version of the *code* — `pyproject.toml`'s package version. This is "
+            "the one that explains bytes: a partition or segment that serialises "
+            "differently than expected is explained by this changing, never by "
+            "the spec version changing."
+        )
+    )
+    spec_version: str = Field(
+        description=(
+            "Version of the *constitutional decisions* — CLAUDE.md's version. "
+            "This is the one that explains behaviour a reader might otherwise "
+            "call a defect: a run that landed Bronze byte-for-byte was correct "
+            "under spec 0.5.0 and is not under 0.5.1, and only this field says "
+            "which rules it was judged by. It advances independently of the "
+            "kernel version (§12), so several kernel releases can carry one spec "
+            "version and a spec change can precede any code that implements it."
+        )
+    )
     manifest_hash: str = Field(
         description="Content hash of the engagement manifest this run resolved"
     )
@@ -154,6 +181,7 @@ class RunManifest(BaseModel):
         return RunManifest(
             run_id=self.run_id,
             kernel_version=self.kernel_version,
+            spec_version=self.spec_version,
             manifest_hash=self.manifest_hash,
             bronze_partitions=(*self.bronze_partitions, *refs),
             audit_segments=self.audit_segments,
@@ -164,6 +192,7 @@ class RunManifest(BaseModel):
         return RunManifest(
             run_id=self.run_id,
             kernel_version=self.kernel_version,
+            spec_version=self.spec_version,
             manifest_hash=self.manifest_hash,
             bronze_partitions=self.bronze_partitions,
             audit_segments=(*self.audit_segments, *refs),
