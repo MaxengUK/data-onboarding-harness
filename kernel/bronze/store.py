@@ -13,8 +13,6 @@ that only the third one carries weight:
 
 from __future__ import annotations
 
-import hashlib
-import io
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -23,6 +21,13 @@ import polars as pl
 
 from kernel.bronze.errors import BronzeIntegrityError, PartitionExistsError
 from kernel.bronze.partition import PartitionRef, default_clock, new_partition_id
+from kernel.serialisation import (
+    PARQUET_WRITER_OPTIONS,
+    WRITER,
+    content_hash,
+    deserialise_parquet,
+    serialise_parquet,
+)
 from kernel.storage.base import ObjectExistsError, StoragePath
 
 logger = logging.getLogger(__name__)
@@ -30,51 +35,18 @@ logger = logging.getLogger(__name__)
 #: Object name inside a partition. A partition is one directory holding one file.
 DATA_OBJECT = "data.parquet"
 
-#: Parquet writer options, pinned (§4.2.1, P2).
-#:
-#: Measured on polars 1.43.2 before pinning: repeated writes of one frame are
-#: byte-stable, and thread count does not affect output. But `row_group_size`
-#: defaults to a value *derived from the data*, and at 400k rows the default and
-#: an explicit 100_000 produce different bytes. So the risk is not that one call
-#: returns two answers; it is that a derived default drifts with input shape or a
-#: library release, silently, the way the exporter's line endings drifted with
-#: the host OS.
-#:
-#: What this does and does not buy:
-#: - It does **not** make Bronze verification depend on write reproducibility.
-#:   `verify_partition` re-hashes stored bytes; it never re-serialises. Existing
-#:   partitions survive a polars upgrade untouched.
-#: - It **does** make a partition's bytes a function of its data alone, so two
-#:   ingests of one extract are comparable by hash, and it makes any future
-#:   Parquet *output* (where P2 applies directly) deterministic by construction.
-#: - It does **not** survive a library version bump. `PartitionRef.writer`
-#:   records the version so that difference is explicable rather than mysterious.
-PARQUET_WRITER_OPTIONS: dict[str, object] = {
-    "compression": "zstd",
-    "compression_level": 3,
-    "statistics": True,
-    "row_group_size": 100_000,
-    "data_page_size": 1024 * 1024,
-}
-
-_WRITER = f"polars-{pl.__version__}"
-
-
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def _serialise(frame: pl.DataFrame) -> bytes:
-    """Serialise `frame` to Parquet bytes under the pinned options.
-
-    The single call site of `write_parquet` in the kernel. Serialising to a
-    buffer rather than to a path is what lets the hash be taken over exactly the
-    bytes that are then stored — "what was hashed" and "what was written" are the
-    same object rather than two things asserted to be equal.
-    """
-    buffer = io.BytesIO()
-    frame.write_parquet(buffer, **PARQUET_WRITER_OPTIONS)  # type: ignore[arg-type]
-    return buffer.getvalue()
+#: Re-exported so `kernel.bronze.PARQUET_WRITER_OPTIONS` still resolves. The
+#: options moved to `kernel.serialisation` when the audit store became the second
+#: immutable store subject to the same byte discipline; they were never
+#: Bronze-specific, only Bronze-first.
+__all__ = [
+    "DATA_OBJECT",
+    "PARQUET_WRITER_OPTIONS",
+    "partition_data_object",
+    "read_partition",
+    "verify_partition",
+    "write_partition",
+]
 
 
 def partition_data_object(location: StoragePath, partition_id: str) -> StoragePath:
@@ -101,7 +73,7 @@ def write_partition(
     be the thing that changed a value.
     """
     partition_id = partition_id or new_partition_id(clock)
-    data = _serialise(frame)
+    data = serialise_parquet(frame)
     target = partition_data_object(location, partition_id)
 
     try:
@@ -125,11 +97,11 @@ def write_partition(
 
     return PartitionRef(
         partition_id=partition_id,
-        content_hash=_sha256(data),
+        content_hash=content_hash(data),
         size_bytes=len(data),
         row_count=frame.height,
         created_at=clock().astimezone(UTC),
-        writer=_WRITER,
+        writer=WRITER,
     )
 
 
@@ -146,7 +118,7 @@ def verify_partition(location: StoragePath, ref: PartitionRef) -> bytes:
     """
     target = partition_data_object(location, ref.partition_id)
     data = target.read_bytes()
-    actual = _sha256(data)
+    actual = content_hash(data)
     if actual != ref.content_hash:
         raise BronzeIntegrityError(
             f"Bronze partition {ref.partition_id!r} at {target.uri} does not "
@@ -163,4 +135,4 @@ def read_partition(location: StoragePath, ref: PartitionRef) -> pl.DataFrame:
     Verification is unconditional: there is no parameter that skips it, because
     a read path that can skip it is a read path that will be used to skip it.
     """
-    return pl.read_parquet(io.BytesIO(verify_partition(location, ref)))
+    return deserialise_parquet(verify_partition(location, ref))

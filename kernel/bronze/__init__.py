@@ -14,8 +14,8 @@ containing the operation, which is a stronger statement than a flag that default
 to off. `tests/test_bronze.py` asserts this by introspection so that reversing
 the decision cannot be silent.
 
-**Known limit — a partition is held whole in memory.** `_serialise` builds the
-whole Parquet object in a buffer and `read_partition` reads it back whole. This
+**Known limit — a partition is held whole in memory.** `serialise_parquet` builds
+the whole Parquet object in a buffer and `read_partition` reads it back whole. This
 is not a separate scaling problem: it is where the harness's single-node ceiling
 (Polars + DuckDB, §14) shows up in Bronze. A dataset that does not fit in memory
 does not fit this build anywhere, and the answer when one arrives is §14's Spark
