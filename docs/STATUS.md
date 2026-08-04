@@ -1,6 +1,6 @@
 # STATUS — 4 August 2026
 
-**Reflects:** `CLAUDE.md` v0.5.2 · repo `MaxengUK/data-onboarding-harness` @ `4b78af3`
+**Reflects:** `CLAUDE.md` v0.5.3 · repo `MaxengUK/data-onboarding-harness` @ `0fd1d14`
 **Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. `ingest`, `profile`, `normalize` and CLI wiring remain deliberately out of scope: what exists is the storage floor those stages will stand on, not the stages.
 **This is a living document.** Sections are updated in place as items close, not appended to. Where a section records a decision rather than a state, it says so.
 
@@ -189,7 +189,7 @@ That somewhere was named in §12 for Bronze and named nowhere for audit, which i
 - `tenant` and `engagement` were removed from the evidence artifact (fail-closed, correct for now). The Readiness Report (item 13) must bind itself to an engagement somehow — decide the source then.
 - VKN label matching remains a fixed spelling list. The real answer is semantic-type binding via the manifest's `column_map` (§7.5), which lands with item 3. Do not keep widening the regex.
 - `;` delimiter detection in the guard is tr-TR-specific knowledge sitting in the wrong layer. It belongs in `packs/core/tr-core` once that exists.
-- `pyproject.toml` declares `version = "0.4.0"` while `CLAUDE.md` is at 0.5.2. If these are meant to be independent — a package version and a spec version — nothing says so and they will keep being read as drift. `RunManifest.kernel_version` is caller-supplied today precisely to avoid guessing which one it means; decide before anything reads a version at runtime.
+- ~~`pyproject.toml` declares `version = "0.4.0"` while `CLAUDE.md` is at 0.5.2.~~ **Closed — they are independent by decision** (`CLAUDE.md` 0.5.3). The package version versions the *code*; the spec version versions the *constitutional decisions* the code was written against. Several kernel releases can sit against one spec version, and a spec change that no code has caught up with is an ordinary state rather than an error, so lockstep would buy bookkeeping and nothing else. The gap is now recorded in three places that a future reader might reach from: a comment beside the `version` key telling them not to "sync" it, §12, and `RunManifest`, which carries **both** as separate required fields. The pair is meant to be read together — `kernel_version` explains bytes, `spec_version` explains behaviour that would otherwise look like a defect, since a run that landed Bronze byte-for-byte was correct under spec 0.5.0 and is not under 0.5.1.
 
 ---
 
