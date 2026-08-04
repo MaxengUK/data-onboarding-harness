@@ -47,8 +47,19 @@ class PartitionRef(BaseModel):
     and this is a hash of a file.
 
     Lives in `kernel/bronze` rather than `schemas/` because it is not a manifest,
-    pack, or evidence schema. It will likely move to a run-manifest schema when
-    §12 is implemented.
+    pack, or evidence schema. An earlier note here expected it to move into a
+    run-manifest schema once §12 was implemented; it did not, and the reason is
+    worth keeping. `kernel/run_manifest.py` *references* this type rather than
+    owning it, because moving it would invert the dependency — the store that
+    produces a reference would then depend on the record that collects it — and
+    because a `PartitionRef` is meaningful on its own: it is what
+    `write_partition` returns, before any manifest exists to record it.
+
+    **Deliberately carries no run id.** A run manifest may name partitions
+    written by *earlier* runs, which is what §4.2's read-once property and rule
+    backtesting against historical Bronze both depend on. `SegmentRef` is the
+    opposite case and does carry one, because a run writes only its own audit
+    segments (§12).
     """
 
     model_config = {"frozen": True}
