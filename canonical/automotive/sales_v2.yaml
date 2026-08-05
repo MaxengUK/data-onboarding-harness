@@ -9,6 +9,19 @@ id: automotive/sales_v2
 # field". Inference would silently pick one, and the two answer different
 # questions -- an extract is fresh with respect to when orders were taken, not
 # to when cars happened to be handed over.
+#
+# **The entity here is not settled.** §7.6 says entities are named by role, and
+# this schema has not answered which role a row plays: a vehicle, an order line,
+# or a delivery. `vehicle_sale` is a placeholder that reads as "one sale of one
+# vehicle", and `key: [chassis_no]` presumes one sale per vehicle -- which is
+# false the first time a car is resold. Naming it before answering it is how a
+# canonical schema acquires a client's org chart, so it is recorded as open in
+# docs/STATUS.md rather than settled here by default.
+grain:
+  entity: vehicle_sale
+  period: instant
+  layout: wide
+
 fields:
   - name: chassis_no
     semantic_type: chassis_no

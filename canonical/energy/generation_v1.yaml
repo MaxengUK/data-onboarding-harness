@@ -4,8 +4,31 @@ id: energy/generation_v1
 # invariants (generation >= 0, efficiency <= theoretical ceiling) rather than
 # from mining, which is why the quantity is energy_quantity and not
 # currency_amount -- the rule family that attaches to it is different.
+#
+# `measurement_point_id`, not `plant_code` (§7.6). A client measures at the
+# plant, another at the inverter, a third at the string, a fourth at the meter;
+# all four are correct and all four are the same role -- the thing readings are
+# attributed to. IEC 61968-9's CIM defines `UsagePoint` that way, independent of
+# granularity, for exactly this reason. `plant_code` would commit this shared
+# artifact to one client's topology and silently misfit the other three.
+#
+# Which level a point actually sits at is an engagement fact and an input to
+# *rules*, not to identity: "generation must not exceed nameplate capacity"
+# needs to know whether the point is a plant or a string, while "one reading per
+# point per instant" does not. Where that level is declared is open -- see
+# docs/STATUS.md.
+grain:
+  entity: measurement_point
+  period: instant
+  # Wide: each measure is its own column. Stated rather than assumed, because
+  # the assumption was invisible until it was written down. Under `long` the
+  # same readings arrive as (measurement_point_id, reading_at,
+  # measurement_type, value) and the key gains `measurement_type` -- a
+  # different artifact, not an edit to this one.
+  layout: wide
+
 fields:
-  - name: plant_code
+  - name: measurement_point_id
     semantic_type: opaque_key
     required: true
 
@@ -21,5 +44,5 @@ fields:
     semantic_type: category
     required: false
 
-key: [plant_code, reading_at]
+key: [measurement_point_id, reading_at]
 freshness_field: reading_at

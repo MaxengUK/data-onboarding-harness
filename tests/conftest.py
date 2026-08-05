@@ -45,7 +45,7 @@ MINIMAL_MANIFEST: dict = {
             # field is reading_at, so a partial map now fails two blockers
             # rather than passing quietly.
             "column_map": {
-                "Santral": "plant_code",
+                "Santral": "measurement_point_id",
                 "Okuma Zamani": "reading_at",
                 "Uretim": "generation_mwh",
             },

@@ -27,6 +27,44 @@
       "title": "CanonicalField",
       "type": "object"
     },
+    "Grain": {
+      "additionalProperties": false,
+      "description": "What one row of this schema represents.",
+      "properties": {
+        "entity": {
+          "description": "The role a row is about, named at the level where clients agree \u2014 'measurement_point', not 'plant'. A client measuring at the inverter and one measuring at the meter share the role and not the level (\u00a77.6).",
+          "minLength": 1,
+          "title": "Entity",
+          "type": "string"
+        },
+        "period": {
+          "description": "Whether a row covers a point in time, a span, or is not temporal.",
+          "enum": [
+            "instant",
+            "interval",
+            "none"
+          ],
+          "title": "Period",
+          "type": "string"
+        },
+        "layout": {
+          "description": "Whether measures are columns (wide) or rows (long). Under 'long' a row also carries which measure it holds, and the key includes it.",
+          "enum": [
+            "wide",
+            "long"
+          ],
+          "title": "Layout",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "period",
+        "layout"
+      ],
+      "title": "Grain",
+      "type": "object"
+    },
     "SemanticType": {
       "description": "What a column means, independent of what the client called it.\n\nEach member declares whether it is PII-typed (\u00a77.5, \u00a78).",
       "enum": [
@@ -61,6 +99,9 @@
       "title": "Id",
       "type": "string"
     },
+    "grain": {
+      "$ref": "#/$defs/Grain"
+    },
     "fields": {
       "items": {
         "$ref": "#/$defs/CanonicalField"
@@ -87,6 +128,7 @@
   },
   "required": [
     "id",
+    "grain",
     "fields",
     "key",
     "freshness_field"

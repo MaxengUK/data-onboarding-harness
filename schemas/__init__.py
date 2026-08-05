@@ -1,5 +1,5 @@
 from .audit import AuditRecord
-from .canonical import CanonicalField, CanonicalSchema
+from .canonical import CanonicalField, CanonicalSchema, Grain
 from .evidence import EvidenceArtifact
 from .manifest import Manifest
 from .pack import PackManifest
@@ -12,6 +12,7 @@ __all__ = [
     "CanonicalSchema",
     "Evidence",
     "EvidenceArtifact",
+    "Grain",
     "Manifest",
     "PackManifest",
     "Provenance",

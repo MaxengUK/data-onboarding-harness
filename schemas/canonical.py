@@ -17,6 +17,8 @@ change what `sales_v2` means, at which point two engagements emit different
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 from kernel.registries import SemanticType
@@ -45,6 +47,42 @@ class CanonicalField(BaseModel):
     )
 
 
+# Why grain is a declaration rather than something read off the key: a key says
+# which rows are *distinct*, not what a row *is*, and the two come apart exactly
+# where it matters. `key: [chassis_no]` reads as "one row per vehicle" until a
+# vehicle is sold twice.
+#
+# `layout` sits here rather than beside `fields` because wide and long are a
+# statement about the row, not about which fields exist. Under `long` the same
+# readings arrive as (point, time, measurement_type, value): the key gains a
+# column, the entity and the period do not change.
+class Grain(BaseModel):
+    """What one row of this schema represents."""
+
+    model_config = {"frozen": True, "extra": "forbid"}
+
+    entity: str = Field(
+        min_length=1,
+        description=(
+            "The role a row is about, named at the level where clients agree — "
+            "'measurement_point', not 'plant'. A client measuring at the "
+            "inverter and one measuring at the meter share the role and not the "
+            "level (§7.6)."
+        ),
+    )
+    period: Literal["instant", "interval", "none"] = Field(
+        description=(
+            "Whether a row covers a point in time, a span, or is not temporal."
+        )
+    )
+    layout: Literal["wide", "long"] = Field(
+        description=(
+            "Whether measures are columns (wide) or rows (long). Under 'long' a "
+            "row also carries which measure it holds, and the key includes it."
+        )
+    )
+
+
 class CanonicalSchema(BaseModel):
     """A canonical schema artifact, loaded from `canonical/` (§7.6)."""
 
@@ -63,6 +101,7 @@ class CanonicalSchema(BaseModel):
             "schema is a new id, never an edit to this one."
         ),
     )
+    grain: Grain
     fields: tuple[CanonicalField, ...] = Field(min_length=1)
     # Preflight blocks when the key is not mapped rather than letting discovery
     # recover it later; `resolve` needs one before it can cluster at all. That

@@ -34,12 +34,13 @@ from tests.conftest import manifest_with
 
 VALID = {
     "id": "energy/test_v1",
+    "grain": {"entity": "measurement_point", "period": "instant", "layout": "wide"},
     "fields": [
-        {"name": "plant_code", "semantic_type": "opaque_key", "required": True},
+        {"name": "measurement_point_id", "semantic_type": "opaque_key", "required": True},
         {"name": "reading_at", "semantic_type": "date", "required": True},
         {"name": "generation_mwh", "semantic_type": "energy_quantity"},
     ],
-    "key": ["plant_code", "reading_at"],
+    "key": ["measurement_point_id", "reading_at"],
     "freshness_field": "reading_at",
 }
 
@@ -212,3 +213,75 @@ def test_an_unresolvable_schema_yields_an_error_not_an_exception() -> None:
     assert not binding.resolved
     assert binding.error is not None
     assert binding.columns == ()
+
+
+# --- grain (§7.6) -------------------------------------------------------------
+
+
+def test_the_shipped_schemas_declare_a_grain() -> None:
+    """A key says which rows are distinct; it does not say what a row *is*."""
+    for schema_id in available_ids():
+        grain = resolve_canonical_schema(schema_id).grain
+        assert grain.entity
+        assert grain.period in ("instant", "interval", "none")
+        assert grain.layout in ("wide", "long")
+
+
+def test_the_energy_entity_is_named_by_role_not_by_level() -> None:
+    """§7.6, and the reason `plant_code` was wrong.
+
+    A client measures at the plant, another at the inverter, a third at the
+    string, a fourth at the meter. All four are correct and all four are the
+    same role — the thing readings are attributed to — which is how IEC 61968-9
+    defines `UsagePoint`. `canonical/` is not layered, so one schema has to fit
+    all four, and a level-named field fits exactly one.
+    """
+    schema = resolve_canonical_schema("energy/generation_v1")
+
+    assert schema.grain.entity == "measurement_point"
+    assert "measurement_point_id" in schema.field_names
+    assert not any(
+        level in name
+        for name in schema.field_names
+        for level in ("plant", "inverter", "string", "meter_id")
+    ), "a field named after one client's organisational level"
+
+
+def test_the_wide_layout_is_declared_rather_than_assumed() -> None:
+    """It was invisible until written down.
+
+    Under `long` the same readings arrive as (point, time, measurement_type,
+    value) and the key gains a column — a different artifact, not an edit to
+    this one.
+    """
+    schema = resolve_canonical_schema("energy/generation_v1")
+
+    assert schema.grain.layout == "wide"
+    assert schema.key == ("measurement_point_id", "reading_at")
+    assert "measurement_type" not in schema.field_names
+
+
+def test_grain_is_required_and_refuses_an_unknown_layout() -> None:
+    without_grain = {key: value for key, value in VALID.items() if key != "grain"}
+
+    with pytest.raises(ValidationError):
+        CanonicalSchema.model_validate(without_grain)
+
+    with pytest.raises(ValidationError):
+        CanonicalSchema.model_validate(
+            VALID | {"grain": VALID["grain"] | {"layout": "pivoted"}}
+        )
+
+
+def test_granularity_is_not_part_of_the_key() -> None:
+    """Level is an input to rules, not to identity.
+
+    "Generation must not exceed nameplate capacity" needs to know whether the
+    point is a plant or a string; "one reading per point per instant" does not.
+    Putting the level in the key would make identity vary by client, which is
+    what role-naming exists to prevent.
+    """
+    schema = resolve_canonical_schema("energy/generation_v1")
+
+    assert schema.key == ("measurement_point_id", "reading_at")
+    assert not hasattr(schema.grain, "level")

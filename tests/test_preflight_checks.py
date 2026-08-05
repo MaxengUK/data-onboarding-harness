@@ -370,7 +370,7 @@ def test_an_unmapped_key_field_blocks(manifest, environment) -> None:
     report = run(keyless, environment)
 
     assert status_of(report, "schema.declared_key_present") is CheckStatus.FAILED
-    assert "plant_code" in detail_of(report, "schema.declared_key_present")
+    assert "measurement_point_id" in detail_of(report, "schema.declared_key_present")
 
 
 def test_a_stale_extract_warns_with_its_age(environment, source_dir) -> None:
