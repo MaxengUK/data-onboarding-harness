@@ -19,7 +19,7 @@ from pathlib import Path
 
 from kernel.stages.preflight import CheckStatus, run_preflight
 from schemas.manifest import Manifest
-from tests.conftest import KERNEL_VERSION, MINIMAL_MANIFEST, manifest_with
+from tests.conftest import FIXED_NOW, KERNEL_VERSION, MINIMAL_MANIFEST, manifest_with
 
 
 def status_of(report, check_id: str) -> CheckStatus:
@@ -30,8 +30,10 @@ def detail_of(report, check_id: str) -> str:
     return next(line.detail for line in report.results if line.check_id == check_id)
 
 
-def run(manifest: Manifest, environment: dict[str, str]):
-    return run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+def run(manifest: Manifest, environment: dict[str, str], now=FIXED_NOW):
+    return run_preflight(
+        manifest, kernel_version=KERNEL_VERSION, environment=environment, now=now
+    )
 
 
 # --- 1. connectivity & privilege ---------------------------------------------
@@ -96,18 +98,17 @@ def test_schema_fails_when_a_mapped_column_is_absent(manifest, environment, sour
     assert "Uretim" in detail_of(report, "schema.mapped_columns_exist")
 
 
-def test_the_unimplemented_schema_checks_block(manifest, environment) -> None:
-    """Three of the four schema checks need a semantic type binding the manifest
-    cannot express (BUILD-PLAN item 3). None is stubbed; all three block."""
+def test_the_undeclared_pii_check_still_blocks(manifest, environment) -> None:
+    """The one schema check 3a did not open.
+
+    Detecting a PII *shape* in an unmapped column needs locale-aware shape
+    detectors, which belong in `tr-core` (BUILD-PLAN item 9) rather than in the
+    kernel (P3). It is not stubbed; it blocks.
+    """
     report = run(manifest, environment)
 
-    for check_id in (
-        "schema.types_match_semantic_types",
-        "schema.declared_key_present",
-        "schema.no_undeclared_pii_column",
-    ):
-        assert status_of(report, check_id) is CheckStatus.UNAVAILABLE
-        assert check_id in {line.check_id for line in report.blocking}
+    assert status_of(report, "schema.no_undeclared_pii_column") is CheckStatus.UNAVAILABLE
+    assert "schema.no_undeclared_pii_column" in {line.check_id for line in report.blocking}
 
 
 # --- 3. encoding & locale -----------------------------------------------------

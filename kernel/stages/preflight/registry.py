@@ -101,6 +101,13 @@ REGISTRY: tuple[CheckSpec, ...] = (
     ),
     # --- Schema conformance --------------------------------------------------
     _spec(
+        "schema.canonical_schema_resolves",
+        Category.SCHEMA,
+        Severity.BLOCKER,
+        "manifest.canonical_schema resolves to exactly one artifact, and every "
+        "canonical field the column map names exists in it (§7.6)",
+    ),
+    _spec(
         "schema.mapped_columns_exist",
         Category.SCHEMA,
         Severity.BLOCKER,

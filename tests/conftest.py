@@ -8,6 +8,7 @@ carry to a `ready` verdict.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,11 @@ import pytest
 from schemas.manifest import Manifest
 
 KERNEL_VERSION = "0.4.0"
+
+#: Twelve hours after the newest row in `CLEAN_CSV`, so the default 48h
+#: freshness window passes. Fixed rather than `datetime.now()`: `run_preflight`
+#: takes the clock as an argument precisely so a freshness test can be pinned.
+FIXED_NOW = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
 
 #: Deliberately declares no packs and no external references. Both resolve
 #: vacuously, which is what lets the digest be complete while BUILD-PLAN item 3
@@ -34,7 +40,15 @@ MINIMAL_MANIFEST: dict = {
             },
             "format": "csv",
             "encoding": "utf-8",
-            "column_map": {"Uretim": "generation_mwh"},
+            # Maps onto `canonical/energy/generation_v1.yaml`, and maps all of
+            # it: the schema's key is [plant_code, reading_at] and its freshness
+            # field is reading_at, so a partial map now fails two blockers
+            # rather than passing quietly.
+            "column_map": {
+                "Santral": "plant_code",
+                "Okuma Zamani": "reading_at",
+                "Uretim": "generation_mwh",
+            },
         }
     ],
     "bronze": {"location": "/srv/harness/bronze", "retention_days": 365},
@@ -53,7 +67,11 @@ MINIMAL_MANIFEST: dict = {
     "preflight": {"row_count_bounds": {"min": 1, "max": 1000}},
 }
 
-CLEAN_CSV = "Uretim;Tarih\n120.5;2026-08-01\n130.0;2026-08-02\n"
+CLEAN_CSV = (
+    "Santral;Okuma Zamani;Uretim\n"
+    "PLANT-01;2026-08-01T00:00:00Z;120.5\n"
+    "PLANT-01;2026-08-02T00:00:00Z;130.0\n"
+)
 
 
 def manifest_with(**overrides) -> Manifest:

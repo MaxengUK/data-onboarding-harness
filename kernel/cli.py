@@ -18,6 +18,7 @@ no bypass option has appeared.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -75,6 +76,10 @@ def preflight(
         parsed,
         kernel_version=kernel_version(),
         environment=dict(os.environ),
+        # The single clock read in the whole stage, taken here at the edge. Every
+        # check receives it as a value, so nothing below this line can produce a
+        # result that depends on when it happened to be called.
+        now=datetime.now(UTC),
     )
 
     console.print(render_report(report))

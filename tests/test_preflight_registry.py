@@ -25,6 +25,12 @@ EXPECTED_CHECK_IDS = frozenset(
         "connectivity.grants_match_declared_scope",
         "connectivity.target_writable",
         "connectivity.credential_expiry_exceeds_run",
+        # Added in 0.6.0 with the canonical schema artifact. Adding an id here
+        # is the deliberate act the pinning exists to require — §6.2.2 gained
+        # the check in the same change, because a registry that becomes a
+        # superset of that table loses the invariant that no check exists
+        # outside it.
+        "schema.canonical_schema_resolves",
         "schema.mapped_columns_exist",
         "schema.types_match_semantic_types",
         "schema.declared_key_present",

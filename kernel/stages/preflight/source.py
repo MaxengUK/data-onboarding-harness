@@ -24,6 +24,7 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from kernel.storage import UnsupportedLocationScheme, resolve_location
 from schemas.manifest import Manifest, SourceConfig
@@ -58,6 +59,21 @@ class SourceProbe:
     delimiter: str | None = None
     columns: tuple[str, ...] | None = None
     row_count: int | None = None
+    #: The newest ISO-8601 value in the declared freshness column, and how many
+    #: of that column's values could be read at all.
+    #:
+    #: **Derived here rather than retained for a check to search**, which is
+    #: §6.2.2's sampling discipline made structural: the probe reads the column,
+    #: computes one scalar, and discards the values. A `SourceProbe` that carried
+    #: a column's contents would be a source-value store passed to twenty-nine
+    #: checks, one `repr()` away from a log line.
+    #:
+    #: ISO-8601 only. Parsing `01.08.2026` is locale knowledge and belongs in
+    #: `tr-core` (BUILD-PLAN item 9), not in the kernel (P3). An interchange
+    #: format is not a locale, so reading one here crosses no line.
+    freshness_newest: datetime | None = None
+    freshness_parsed: int = 0
+    freshness_total: int = 0
     extra: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -93,8 +109,55 @@ def _sniff_delimiter(header_line: str) -> str:
     return max(CANDIDATE_DELIMITERS, key=lambda candidate: header_line.count(candidate))
 
 
-def probe_source(manifest: Manifest, environment: dict[str, str]) -> SourceProbe:
-    """Read the bound source once and return what could be established."""
+def _parse_iso(value: str) -> datetime | None:
+    """ISO-8601 only, and deliberately nothing else.
+
+    `fromisoformat` accepts a date or a datetime; a naive result is treated as
+    UTC rather than as local time, because "some local time somewhere" is not a
+    quantity a freshness window can be measured against.
+    """
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _freshness(rows: list[list[str]], header: list[str], column: str | None):
+    """The newest ISO value in `column`, plus how much of it was readable."""
+    if column is None or column not in header:
+        return None, 0, 0
+
+    index = header.index(column)
+    newest: datetime | None = None
+    parsed = 0
+
+    for row in rows:
+        if index >= len(row):
+            continue
+        moment = _parse_iso(row[index])
+        if moment is None:
+            continue
+        parsed += 1
+        if newest is None or moment > newest:
+            newest = moment
+
+    return newest, parsed, len(rows)
+
+
+def probe_source(
+    manifest: Manifest,
+    environment: dict[str, str],
+    freshness_column: str | None = None,
+) -> SourceProbe:
+    """Read the bound source once and return what could be established.
+
+    `freshness_column` is resolved by the caller from the canonical schema, so
+    the probe knows which single column to derive a scalar from. Passing it in
+    rather than retaining every column's values is what keeps §6.2.2's "samples
+    never reach the report" a property of the data flow instead of a rule the
+    checks have to remember.
+    """
     if len(manifest.sources) != 1:
         return SourceProbe(
             unsupported=(
@@ -119,10 +182,12 @@ def probe_source(manifest: Manifest, environment: dict[str, str]) -> SourceProbe
             )
         )
 
-    return _probe_file(source, environment)
+    return _probe_file(source, environment, freshness_column)
 
 
-def _probe_file(source: SourceConfig, environment: dict[str, str]) -> SourceProbe:
+def _probe_file(
+    source: SourceConfig, environment: dict[str, str], freshness_column: str | None
+) -> SourceProbe:
     try:
         root = resolve_connection_ref(source.binding.connection_ref, environment)
         location = resolve_location(root) / source.binding.objects[0]
@@ -156,10 +221,16 @@ def _probe_file(source: SourceConfig, environment: dict[str, str]) -> SourceProb
     delimiter = _sniff_delimiter(text.splitlines()[0])
     rows = list(csv.reader(io.StringIO(text), delimiter=delimiter))
     header, *body = rows
+    header = [name.strip() for name in header]
+
+    newest, parsed, total = _freshness(body, header, freshness_column)
 
     return SourceProbe(
         location_uri=location.uri,
         delimiter=delimiter,
-        columns=tuple(name.strip() for name in header),
+        columns=tuple(header),
         row_count=len(body),
+        freshness_newest=newest,
+        freshness_parsed=parsed,
+        freshness_total=total,
     )

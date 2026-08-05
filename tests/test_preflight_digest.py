@@ -24,7 +24,7 @@ from kernel.stages.preflight import (
     manifest_hash,
     run_preflight,
 )
-from tests.conftest import KERNEL_VERSION, manifest_with
+from tests.conftest import FIXED_NOW, KERNEL_VERSION, manifest_with
 
 SCHEMA = ("Uretim", "Tarih")
 
@@ -109,7 +109,7 @@ def test_a_declared_pack_makes_the_digest_incomplete(manifest) -> None:
 def test_an_incomplete_digest_blocks_the_verdict(manifest, environment, source_dir) -> None:
     (source_dir / "generation.csv").unlink()
 
-    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
 
     assert report.digest is None
     assert report.verdict.value == "blocked"
@@ -117,7 +117,7 @@ def test_an_incomplete_digest_blocks_the_verdict(manifest, environment, source_d
 
 
 def test_a_complete_digest_covers_every_component(manifest, environment) -> None:
-    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
 
     assert report.digest is not None
     assert report.digest.covers == tuple(DigestComponent)
@@ -129,7 +129,7 @@ def test_the_report_says_when_nothing_can_be_armed(manifest, environment, source
 
     (source_dir / "generation.csv").unlink()
     rendered = render_report(
-        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
     )
 
     assert "NO PREFLIGHT DIGEST" in rendered

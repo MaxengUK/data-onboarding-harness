@@ -31,7 +31,7 @@ from kernel.stages.preflight import (
     Verdict,
     run_preflight,
 )
-from tests.conftest import KERNEL_VERSION
+from tests.conftest import FIXED_NOW, KERNEL_VERSION
 
 
 def result(
@@ -65,7 +65,7 @@ def test_an_unimplemented_blocker_blocks(manifest, environment) -> None:
     that hid its own gaps would answer the opposite of the question §6.2.4 sells
     preflight on.
     """
-    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
 
     unavailable_blockers = [
         line
@@ -116,7 +116,7 @@ def test_blocked_names_the_category_and_the_check(manifest, environment) -> None
     from kernel.stages.preflight import render_report
 
     rendered = render_report(
-        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
     )
 
     assert "BLOCKED BY:" in rendered
@@ -129,7 +129,7 @@ def test_warnings_are_listed_individually_by_name(manifest, environment) -> None
     check id, and it has to be in the report for arming to be able to take it."""
     from kernel.stages.preflight import render_report
 
-    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
     rendered = render_report(report)
 
     assert "acknowledge individually" in rendered
@@ -141,7 +141,7 @@ def test_warnings_are_listed_individually_by_name(manifest, environment) -> None
 
 
 def test_a_result_never_disagrees_with_its_registration(manifest, environment) -> None:
-    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
 
     for line in report.results:
         spec = BY_ID[line.check_id]
@@ -205,7 +205,7 @@ def _any_digest():
 def test_every_registered_check_is_reached_by_a_run(manifest, environment) -> None:
     """The runner walks the registry, not the implementations — so all 29 appear
     in every report, whether or not this build can run them."""
-    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+    report = run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
 
     assert len(report.results) == len(REGISTRY)
     assert {line.check_id for line in report.results} == {spec.check_id for spec in REGISTRY}

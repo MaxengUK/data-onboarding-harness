@@ -10,6 +10,10 @@ manifest — the store tells you what it has, not what it should have.
 
 from __future__ import annotations
 
+from datetime import datetime
+from pathlib import Path
+
+from kernel.canonical import bind_manifest
 from kernel.stages.preflight import checks as _checks  # noqa: F401  (registers)
 from kernel.stages.preflight.contract import CheckContext, Outcome, unavailable
 from kernel.stages.preflight.digest import (
@@ -59,18 +63,30 @@ def run_preflight(
     *,
     kernel_version: str,
     environment: dict[str, str],
+    now: datetime,
+    canonical_root: Path | None = None,
 ) -> PreflightReport:
     """Run preflight against `manifest` and return the Preflight Report.
 
-    Both keywords are required and neither has a default. `kernel_version` enters
-    the digest an approval binds to, so a guessed value would bind an approval to
-    a version nobody shipped. `environment` is passed rather than read from
-    `os.environ` inside because a preflight whose result depends on ambient
-    process state is one no test can pin and no operator can reproduce — the
-    same reason nothing here reads a clock.
+    The three keywords are required and none has a default. `kernel_version`
+    enters the digest an approval binds to, so a guessed value would bind an
+    approval to a version nobody shipped. `environment` and `now` are passed
+    rather than read from `os.environ` and the system clock, because a preflight
+    whose result depends on ambient process state is one no test can pin and no
+    operator can reproduce.
+
+    **The canonical schema is resolved before the source is probed**, and the
+    order matters: the schema declares which field carries freshness, and the
+    probe uses that to derive one scalar from one column and discard the rest.
+    Probing first would mean either retaining every column's values for a check
+    to search later — a source-value store handed to twenty-nine checks — or
+    reading the source twice.
     """
-    probe = probe_source(manifest, environment)
-    results = run_checks(CheckContext(manifest=manifest, source=probe))
+    binding = bind_manifest(manifest, canonical_root)
+    probe = probe_source(manifest, environment, binding.freshness_column)
+    results = run_checks(
+        CheckContext(manifest=manifest, source=probe, binding=binding, now=now)
+    )
 
     digest: PreflightDigest | None = None
     digest_gap = ""

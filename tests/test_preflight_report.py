@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from kernel.stages.preflight import render_report, run_preflight
-from tests.conftest import KERNEL_VERSION, manifest_with
+from tests.conftest import FIXED_NOW, KERNEL_VERSION, manifest_with
 from tests.synthetic import (
     find_valid_tckn,
     synthetic_local_msisdn,
@@ -48,7 +48,7 @@ def test_no_source_value_reaches_the_rendered_report(source_dir, environment) ->
     markers = seeded_source(source_dir)
 
     rendered = render_report(
-        run_preflight(manifest_with(), kernel_version=KERNEL_VERSION, environment=environment)
+        run_preflight(manifest_with(), kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
     )
 
     for marker in markers:
@@ -68,7 +68,7 @@ def test_no_source_value_reaches_any_check_detail(source_dir, environment) -> No
     markers = seeded_source(source_dir)
 
     report = run_preflight(
-        manifest_with(), kernel_version=KERNEL_VERSION, environment=environment
+        manifest_with(), kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW
     )
     serialised = str(report.model_dump())
 
@@ -86,7 +86,7 @@ def test_an_encoding_failure_reports_a_position_not_the_bytes(
     )
 
     report = run_preflight(
-        manifest_with(), kernel_version=KERNEL_VERSION, environment=environment
+        manifest_with(), kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW
     )
     detail = next(
         line.detail
@@ -102,7 +102,7 @@ def test_the_report_names_declaration_class_rows_distinctly(manifest, environmen
     """§6.2.2 (0.5.4): a client reading `restore point: passed` must not conclude
     a restore was tested."""
     rendered = render_report(
-        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
     )
 
     for line in rendered.splitlines():
@@ -114,10 +114,10 @@ def test_rendering_is_deterministic(manifest, environment) -> None:
     """P2 applies to the report as much as to the pipeline: two runs over one
     unchanged source must produce the same document, or a diff means nothing."""
     first = render_report(
-        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
     )
     second = render_report(
-        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment)
+        run_preflight(manifest, kernel_version=KERNEL_VERSION, environment=environment, now=FIXED_NOW)
     )
 
     assert first == second

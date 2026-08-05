@@ -10,7 +10,9 @@ on import order.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
+from kernel.canonical import Binding
 from kernel.stages.preflight.result import CheckStatus
 from kernel.stages.preflight.source import SourceProbe
 from schemas.manifest import Manifest
@@ -64,3 +66,12 @@ class CheckContext:
 
     manifest: Manifest
     source: SourceProbe
+    #: The resolved canonical schema and the column → semantic type chain, or
+    #: the reason there is none (§7.6). Resolved by the runner *before* the
+    #: probe, because the probe needs to know which column carries freshness.
+    binding: Binding
+    #: Supplied, never read from a clock inside a check. Only the freshness
+    #: check needs it, and a check reading `datetime.now()` itself would make
+    #: preflight untestable at exactly the point where "how old is this extract"
+    #: is the question — the same argument that makes `environment` an argument.
+    now: datetime

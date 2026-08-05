@@ -24,12 +24,15 @@ co-locating them would invite the pack loader's precedence rules to reach them.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 from pydantic import ValidationError
 
+from kernel.registries import SemanticType
 from schemas.canonical import CanonicalSchema
+from schemas.manifest import Manifest
 
 #: Repository-root `canonical/`. Mounted alongside packs at runtime (§14), so a
 #: deployment can supply its own directory without the kernel knowing where.
@@ -116,6 +119,81 @@ def resolve_canonical_schema(
         )
 
     return matches[0][1]
+
+
+@dataclass(frozen=True)
+class ColumnBinding:
+    """One link of the chain: source column → canonical field → semantic type.
+
+    This chain is what §7.5 means by "rules bind to semantic types, never to
+    column names", and what §13's `reuse_ratio` measures across engagements.
+    Before the canonical schema existed the middle link was missing, so the
+    chain went source column → canonical field name → *nothing*.
+    """
+
+    source_column: str
+    canonical_field: str
+    semantic_type: SemanticType
+
+
+@dataclass(frozen=True)
+class Binding:
+    """The resolved chain for one manifest, or the reason there is none."""
+
+    schema: CanonicalSchema | None = None
+    error: str | None = None
+    columns: tuple[ColumnBinding, ...] = ()
+    #: Canonical field names the manifest maps to that the schema does not
+    #: declare. A mapping into a field that does not exist fails at `map` (§6);
+    #: preflight surfaces it earlier, when it is still a manifest edit.
+    unknown_fields: tuple[str, ...] = ()
+    #: The *source* column carrying the schema's `freshness_field`, if mapped.
+    #: Resolved here so the probe can derive one scalar from it and discard the
+    #: rest, rather than retaining values for a check to search later.
+    freshness_column: str | None = None
+
+    @property
+    def resolved(self) -> bool:
+        return self.schema is not None
+
+
+def bind_manifest(manifest: Manifest, root: Path | None = None) -> Binding:
+    """Resolve the manifest's canonical schema and bind its column map to it."""
+    try:
+        schema = resolve_canonical_schema(manifest.canonical_schema, root)
+    except CanonicalSchemaError as exc:
+        return Binding(error=str(exc))
+
+    if not manifest.sources:
+        return Binding(schema=schema)
+
+    column_map = manifest.sources[0].column_map
+    columns: list[ColumnBinding] = []
+    unknown: list[str] = []
+    freshness_column: str | None = None
+
+    for source_column, canonical_field in column_map.items():
+        field = schema.field(canonical_field)
+        if field is None:
+            unknown.append(canonical_field)
+            continue
+
+        columns.append(
+            ColumnBinding(
+                source_column=source_column,
+                canonical_field=canonical_field,
+                semantic_type=field.semantic_type,
+            )
+        )
+        if canonical_field == schema.freshness_field:
+            freshness_column = source_column
+
+    return Binding(
+        schema=schema,
+        columns=tuple(columns),
+        unknown_fields=tuple(sorted(set(unknown))),
+        freshness_column=freshness_column,
+    )
 
 
 def available_ids(root: Path | None = None) -> tuple[str, ...]:
