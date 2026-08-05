@@ -1,27 +1,237 @@
 {
-  "description": "**Provisional. Not the rule schema this version of the Harness executes.**\n\nPublished so the artifact set is complete, not because anything reads it.\nThe executable rule shape lands with the predicate registry; until then no\npack should be authored against these fields.",
+  "$defs": {
+    "AppliesTo": {
+      "additionalProperties": false,
+      "description": "What a rule binds to.\n\nA semantic type, never a column name: column names do not survive the trip\nfrom one client to the next.",
+      "properties": {
+        "semantic_type": {
+          "$ref": "#/$defs/SemanticType"
+        }
+      },
+      "required": [
+        "semantic_type"
+      ],
+      "title": "AppliesTo",
+      "type": "object"
+    },
+    "DiscoveryAlgorithm": {
+      "description": "Layer-qualified algorithm names from \u00a79.1.",
+      "enum": [
+        "a_structural.format_cluster",
+        "a_structural.constraint_suggest",
+        "b_dependency.hyfd",
+        "b_dependency.ucc",
+        "b_dependency.ind",
+        "b_dependency.denial",
+        "c_temporal.baseline",
+        "d_semantic.llm_label"
+      ],
+      "title": "DiscoveryAlgorithm",
+      "type": "string"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "What discovery observed. `band` is derived from it, never written.",
+      "properties": {
+        "hold_rate": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Hold Rate",
+          "type": "number"
+        },
+        "violating_rows": {
+          "minimum": 0,
+          "title": "Violating Rows",
+          "type": "integer"
+        },
+        "total_rows": {
+          "exclusiveMinimum": 0,
+          "title": "Total Rows",
+          "type": "integer"
+        },
+        "discovered_by": {
+          "$ref": "#/$defs/DiscoveryAlgorithm"
+        },
+        "corroborated_by": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Corroborated By",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hold_rate",
+        "violating_rows",
+        "total_rows",
+        "discovered_by"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "Predicate": {
+      "description": "A registered predicate: what it is called, what it does, what it needs.",
+      "enum": [
+        "is_null",
+        "is_not_null",
+        "matches_pattern",
+        "length_between",
+        "value_in_set",
+        "is_numeric",
+        "in_range",
+        "has_checksum",
+        "is_iso_date",
+        "field_before",
+        "fields_equal",
+        "is_unique",
+        "cardinality_at_most"
+      ],
+      "title": "Predicate",
+      "type": "string"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Where a rule came from, and \u2014 once signed \u2014 what signed it.",
+      "properties": {
+        "source": {
+          "enum": [
+            "authored",
+            "discovered"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "author": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author"
+        },
+        "signature_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The signed Data Readiness Report entry that confirmed this rule. Required before a discovered rule may load as confirmed or enforced.",
+          "title": "Signature Ref"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Repair": {
+      "additionalProperties": false,
+      "description": "The transform applied when a rule's predicate does not hold.",
+      "properties": {
+        "transform": {
+          "minLength": 1,
+          "title": "Transform",
+          "type": "string"
+        },
+        "reversible": {
+          "default": true,
+          "title": "Reversible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "transform"
+      ],
+      "title": "Repair",
+      "type": "object"
+    },
+    "RuleState": {
+      "description": "The \u00a711 rule lifecycle.",
+      "enum": [
+        "proposed",
+        "confirmed",
+        "enforced",
+        "archived",
+        "deprecated"
+      ],
+      "title": "RuleState",
+      "type": "string"
+    },
+    "SemanticType": {
+      "description": "What a column means, independent of what the client called it.\n\nEach member declares whether it is PII-typed (\u00a77.5, \u00a78).",
+      "enum": [
+        "tckn",
+        "vkn",
+        "phone_mobile",
+        "email",
+        "person_name",
+        "address",
+        "vehicle_plate",
+        "chassis_no",
+        "brand",
+        "model",
+        "category",
+        "province_code",
+        "date",
+        "currency_amount",
+        "count",
+        "opaque_key",
+        "energy_quantity"
+      ],
+      "title": "SemanticType",
+      "type": "string"
+    },
+    "StageName": {
+      "description": "The \u00a76 pipeline stages.",
+      "enum": [
+        "preflight",
+        "ingest",
+        "profile",
+        "discover",
+        "map",
+        "normalize",
+        "validate",
+        "resolve",
+        "emit"
+      ],
+      "title": "StageName",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One rule, authored or discovered, at some point in its lifecycle.",
   "properties": {
     "id": {
+      "minLength": 1,
       "title": "Id",
       "type": "string"
     },
-    "name": {
-      "title": "Name",
+    "title": {
+      "minLength": 1,
+      "title": "Title",
       "type": "string"
     },
-    "description": {
-      "title": "Description",
+    "stage": {
+      "$ref": "#/$defs/StageName"
+    },
+    "kind": {
+      "minLength": 1,
+      "title": "Kind",
       "type": "string"
     },
-    "layer": {
-      "enum": [
-        "L1_structural",
-        "L2_semantic",
-        "L3_cross_entity",
-        "L4_business"
-      ],
-      "title": "Layer",
-      "type": "string"
+    "state": {
+      "$ref": "#/$defs/RuleState",
+      "default": "proposed"
     },
     "severity": {
       "default": "error",
@@ -34,18 +244,99 @@
       "title": "Severity",
       "type": "string"
     },
+    "applies_to": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AppliesTo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "predicate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Predicate"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "params": {
       "additionalProperties": true,
       "title": "Params",
       "type": "object"
+    },
+    "repair": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Repair"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "determinant": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Determinant",
+      "type": "array"
+    },
+    "dependent": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Dependent",
+      "type": "array"
+    },
+    "evidence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Evidence"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "downstream_impact": {
+      "anyOf": [
+        {
+          "enum": [
+            "high",
+            "medium",
+            "low"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Downstream Impact"
     }
   },
   "required": [
     "id",
-    "name",
-    "description",
-    "layer"
+    "title",
+    "stage",
+    "kind",
+    "provenance"
   ],
-  "title": "RuleDefinition",
+  "title": "Rule",
   "type": "object"
 }

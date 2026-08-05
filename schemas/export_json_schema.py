@@ -26,14 +26,14 @@ from schemas import (
     EvidenceArtifact,
     Manifest,
     PackManifest,
-    RuleDefinition,
+    Rule,
 )
 
 SCHEMAS = {
     "manifest.schema.json": Manifest,
     "canonical.schema.json": CanonicalSchema,
     "pack.schema.json": PackManifest,
-    "rule.schema.json": RuleDefinition,
+    "rule.schema.json": Rule,
     "evidence.schema.json": EvidenceArtifact,
     # In-boundary only (§12). Exported here because it is a schema like any
     # other; that it has a JSON Schema does not make it exportable data.

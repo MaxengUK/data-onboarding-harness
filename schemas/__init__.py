@@ -3,14 +3,18 @@ from .canonical import CanonicalField, CanonicalSchema
 from .evidence import EvidenceArtifact
 from .manifest import Manifest
 from .pack import PackManifest
-from .rule import RuleDefinition
+from .rule import AppliesTo, Evidence, Provenance, Repair, Rule
 
 __all__ = [
+    "AppliesTo",
     "AuditRecord",
     "CanonicalField",
     "CanonicalSchema",
+    "Evidence",
     "EvidenceArtifact",
     "Manifest",
     "PackManifest",
-    "RuleDefinition",
+    "Provenance",
+    "Repair",
+    "Rule",
 ]
