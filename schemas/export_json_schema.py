@@ -22,6 +22,7 @@ if __package__ in (None, ""):
 
 from schemas import (
     AuditRecord,
+    CanonicalSchema,
     EvidenceArtifact,
     Manifest,
     PackManifest,
@@ -30,6 +31,7 @@ from schemas import (
 
 SCHEMAS = {
     "manifest.schema.json": Manifest,
+    "canonical.schema.json": CanonicalSchema,
     "pack.schema.json": PackManifest,
     "rule.schema.json": RuleDefinition,
     "evidence.schema.json": EvidenceArtifact,

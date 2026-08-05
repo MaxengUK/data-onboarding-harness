@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "CanonicalField": {
+      "description": "One field of the canonical schema.\n\nNo physical type, deliberately. `emit` will need one to create a target\ntable, and until a target adapter exists there is nothing to consume it \u2014 a\nfield with no reader is a field that drifts out of step with reality while\nlooking authoritative.",
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "semantic_type": {
+          "$ref": "#/$defs/SemanticType",
+          "description": "Resolved against the closed kernel registry (\u00a77.5). This is the binding rules attach to, and the mechanism reuse_ratio measures."
+        },
+        "required": {
+          "default": true,
+          "description": "An unmapped required field fails the run at `map` (\u00a76, P7)",
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "semantic_type"
+      ],
+      "title": "CanonicalField",
+      "type": "object"
+    },
+    "SemanticType": {
+      "description": "What a column means, independent of what the client called it.\n\nEach member declares whether it is PII-typed (\u00a77.5, \u00a78).",
+      "enum": [
+        "tckn",
+        "vkn",
+        "phone_mobile",
+        "email",
+        "person_name",
+        "address",
+        "vehicle_plate",
+        "chassis_no",
+        "brand",
+        "model",
+        "category",
+        "province_code",
+        "date",
+        "currency_amount",
+        "count",
+        "opaque_key",
+        "energy_quantity"
+      ],
+      "title": "SemanticType",
+      "type": "string"
+    }
+  },
+  "description": "A canonical schema artifact, loaded from `canonical/` (\u00a77.6).",
+  "properties": {
+    "id": {
+      "description": "Matches manifest.canonical_schema exactly, e.g. 'energy/generation_v1'. The version is part of the id rather than a field of its own: v2 is a different schema, not a new version of this one, so evolution is a new artifact and a deliberate re-map rather than an in-place edit that silently changes what a client's existing output means.",
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "fields": {
+      "items": {
+        "$ref": "#/$defs/CanonicalField"
+      },
+      "minItems": 1,
+      "title": "Fields",
+      "type": "array"
+    },
+    "key": {
+      "description": "The declared key or unique column combination (\u00a76.2.2). `resolve` needs one before it can cluster at all, and preflight blocks without it rather than letting discovery recover it silently.",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Key",
+      "type": "array"
+    },
+    "freshness_field": {
+      "description": "Which field the \u00a76.2.2 freshness window is measured against. Declared rather than inferred from 'the only date-typed field': sales_v2 carries order_date beside delivery_date, so a second one is the normal case and inference would silently pick a side.",
+      "minLength": 1,
+      "title": "Freshness Field",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "fields",
+    "key",
+    "freshness_field"
+  ],
+  "title": "CanonicalSchema",
+  "type": "object"
+}
