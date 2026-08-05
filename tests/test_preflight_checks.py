@@ -332,3 +332,93 @@ def test_source_dir_fixture_is_used_by_reference(source_dir: Path) -> None:
     """Guards the fixtures themselves: several tests above rewrite the CSV in
     place and would silently test nothing if the path drifted."""
     assert (source_dir / "generation.csv").exists()
+
+
+# --- checks opened by the canonical schema (3a) -------------------------------
+
+
+def test_an_unresolvable_canonical_schema_blocks(manifest, environment) -> None:
+    """§7.6. A run whose target does not exist has nothing to map onto, and
+    `map` would fail later with less to say."""
+    report = run(manifest_with(canonical_schema="energy/absent_v9"), environment)
+
+    assert status_of(report, "schema.canonical_schema_resolves") is CheckStatus.FAILED
+    assert report.verdict.value == "blocked"
+
+
+def test_mapping_to_a_field_the_schema_lacks_blocks(manifest, environment) -> None:
+    stray = manifest_with(
+        sources=[MINIMAL_MANIFEST["sources"][0] | {"column_map": {"Uretim": "invented"}}]
+    )
+
+    report = run(stray, environment)
+
+    assert status_of(report, "schema.canonical_schema_resolves") is CheckStatus.FAILED
+    assert "invented" in detail_of(report, "schema.canonical_schema_resolves")
+
+
+def test_an_unmapped_key_field_blocks(manifest, environment) -> None:
+    """`resolve` needs a key before it can cluster (§6), so a run that cannot
+    produce one must not start."""
+    keyless = manifest_with(
+        sources=[
+            MINIMAL_MANIFEST["sources"][0]
+            | {"column_map": {"Uretim": "generation_mwh", "Okuma Zamani": "reading_at"}}
+        ]
+    )
+
+    report = run(keyless, environment)
+
+    assert status_of(report, "schema.declared_key_present") is CheckStatus.FAILED
+    assert "plant_code" in detail_of(report, "schema.declared_key_present")
+
+
+def test_a_stale_extract_warns_with_its_age(environment, source_dir) -> None:
+    """The freshness window, measured against the schema's declared field.
+
+    The age is reported rather than the timestamp: the value is a source cell,
+    and the age is what the reader wanted anyway.
+    """
+    from datetime import UTC, datetime
+
+    report = run(
+        manifest_with(), environment, now=datetime(2026, 8, 20, tzinfo=UTC)
+    )
+
+    assert (
+        status_of(report, "volume.max_timestamp_within_freshness_window")
+        is CheckStatus.FAILED
+    )
+    detail = detail_of(report, "volume.max_timestamp_within_freshness_window")
+    assert "h old" in detail and "2026-08-02" not in detail
+
+
+def test_a_non_iso_freshness_column_is_unavailable_not_failed(
+    environment, source_dir
+) -> None:
+    """Turkish date shapes need locale-aware parsing, which is `tr-core`'s
+    (BUILD-PLAN item 9). Reporting it `failed` would blame the client's data for
+    a capability the Harness does not have."""
+    (source_dir / "generation.csv").write_text(
+        "Santral;Okuma Zamani;Uretim\nPLANT-01;01.08.2026;120.5\n", encoding="utf-8"
+    )
+
+    report = run(manifest_with(), environment)
+
+    assert (
+        status_of(report, "volume.max_timestamp_within_freshness_window")
+        is CheckStatus.UNAVAILABLE
+    )
+    assert "tr-core" in detail_of(report, "volume.max_timestamp_within_freshness_window")
+
+
+def test_type_compatibility_is_not_applicable_to_a_file(manifest, environment) -> None:
+    """A CSV declares no column types. Shape-versus-type is a different check
+    and belongs to discovery Layer A, not to preflight."""
+    report = run(manifest, environment)
+
+    assert (
+        status_of(report, "schema.types_match_semantic_types")
+        is CheckStatus.NOT_APPLICABLE
+    )
+    assert "Layer A" in detail_of(report, "schema.types_match_semantic_types")
