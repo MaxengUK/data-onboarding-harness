@@ -262,12 +262,18 @@ class Predicate(str, Enum):
     )
 
 
-class PredicateParamError(Exception):
+class PredicateParamError(ValueError):
     """A rule supplied parameters the predicate did not declare, or omitted some.
 
     Raised at *load*, never at evaluation. A rule whose parameters do not match
     its predicate is malformed, and the place to find that out is when the pack
     is read — not partway through a client's batch.
+
+    A `ValueError` subclass on purpose: `schemas.rule.Rule` calls `check_params`
+    from a Pydantic validator, and Pydantic only folds `ValueError` into a
+    `ValidationError`. Inheriting from `Exception` let this escape a rule load
+    raw, so a malformed pack would surface as an unhandled error rather than as
+    the field-level report every other schema problem produces.
     """
 
 

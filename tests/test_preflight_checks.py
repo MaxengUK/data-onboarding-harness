@@ -422,3 +422,94 @@ def test_type_compatibility_is_not_applicable_to_a_file(manifest, environment) -
         is CheckStatus.NOT_APPLICABLE
     )
     assert "Layer A" in detail_of(report, "schema.types_match_semantic_types")
+
+
+# --- checks opened by the predicate registry (3b) -----------------------------
+
+
+def test_the_pack_rule_checks_pass_vacuously_with_no_packs(manifest, environment) -> None:
+    """Both are vacuous today and say so. The vacuity is what lets the walking
+    skeleton run while the pack loader is item 9's work."""
+    report = run(manifest, environment)
+
+    for check_id in ("packs.predicates_exist_in_registry", "packs.semantic_types_resolve"):
+        assert status_of(report, check_id) is CheckStatus.PASSED
+        assert "no packs declared" in detail_of(report, check_id)
+
+
+def test_declaring_a_pack_makes_all_three_pack_checks_unavailable(
+    manifest, environment
+) -> None:
+    """The regression that will look like a regression and is not.
+
+    The moment item 9 declares `core/tr-core@^1.4`, these go green-to-blocked.
+    A manifest that declares something now has something to verify, and nothing
+    can verify it yet.
+    """
+    report = run(manifest_with(packs=["core/tr-core@^1.4"]), environment)
+
+    for check_id in (
+        "packs.declared_packs_resolvable",
+        "packs.predicates_exist_in_registry",
+        "packs.semantic_types_resolve",
+    ):
+        assert status_of(report, check_id) is CheckStatus.UNAVAILABLE
+        assert check_id in {line.check_id for line in report.blocking}
+
+
+def test_the_resolution_logic_works_without_a_loader() -> None:
+    """The check is vacuous; the logic under it is not.
+
+    Called directly with constructed rules, which is how this stays covered
+    until a pack loader can supply them. When one lands, these functions are not
+    written — only called with something in them.
+    """
+    from kernel.stages.preflight.checks.manifest_checks import (
+        unresolved_predicates,
+        unresolved_semantic_types,
+    )
+    from schemas.rule import Rule
+
+    toothless = Rule.model_validate(
+        {
+            "id": "draft.gate0.needs_a_predicate",
+            "title": "A validate-stage rule with nothing to evaluate",
+            "stage": "validate",
+            "kind": "format",
+            "provenance": {"source": "discovered"},
+        }
+    )
+    armed = Rule.model_validate(
+        {
+            "id": "tr-core.generation.not_null",
+            "title": "Generation must be present",
+            "stage": "validate",
+            "kind": "completeness",
+            "applies_to": {"semantic_type": "energy_quantity"},
+            "predicate": "is_not_null",
+            "provenance": {"source": "authored", "author": "maxeng"},
+        }
+    )
+
+    assert unresolved_predicates([toothless, armed]) == (toothless.id,)
+    assert unresolved_semantic_types([toothless, armed]) == (toothless.id,)
+    assert unresolved_predicates([armed]) == ()
+
+
+def test_a_discover_stage_rule_needs_neither(manifest, environment) -> None:
+    """`discover` proposes rules rather than applying them, so a rule bound to
+    it legitimately carries no predicate and no semantic type."""
+    from kernel.stages.preflight.checks.manifest_checks import unresolved_predicates
+    from schemas.rule import Rule
+
+    proposal = Rule.model_validate(
+        {
+            "id": "draft.gate0.chassis_determines_brand",
+            "title": "Chassis number determines brand",
+            "stage": "discover",
+            "kind": "functional_dependency",
+            "provenance": {"source": "discovered"},
+        }
+    )
+
+    assert unresolved_predicates([proposal]) == ()
