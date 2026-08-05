@@ -363,7 +363,8 @@ def test_an_out_of_range_province_stays_clean_beside_a_timestamp(tmp_path):
 def test_blanking_cannot_fabricate_a_plate_across_the_gap(tmp_path):
     """The fill character is not a space, and this is why.
 
-    The plate pattern joins its parts with `[ \t\-]*`, so a space fill welds
+    The plate pattern joins its parts with a whitespace-or-dash run, so a space
+    fill welds
     whatever sat either side of a timestamp into one candidate: a province-code
     number, a run of spaces, and a letter-digit group become a plate the line
     never contained. The guard would report a leak that is not there — the same
