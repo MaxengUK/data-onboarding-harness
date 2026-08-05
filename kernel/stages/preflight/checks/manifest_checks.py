@@ -11,6 +11,10 @@ marked by their registry entry, not by anything in the implementation.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
+from kernel.predicates import Predicate
+from kernel.registries import StageName
 from kernel.stages.preflight.contract import (
     CheckContext,
     Outcome,
@@ -19,6 +23,14 @@ from kernel.stages.preflight.contract import (
     unavailable,
 )
 from kernel.stages.preflight.registry import implements
+from schemas.rule import Rule
+
+#: Stages that evaluate a rule against data, and therefore need something to
+#: evaluate. `discover` proposes rules rather than applying them, so a rule
+#: bound to it legitimately carries neither predicate nor semantic type.
+_PREDICATE_REQUIRING_STAGES = frozenset(
+    {StageName.NORMALIZE, StageName.VALIDATE, StageName.RESOLVE}
+)
 
 
 @implements("packs.declared_packs_resolvable")
@@ -38,6 +50,80 @@ def declared_packs_resolvable(context: CheckContext) -> Outcome:
         f"{len(packs)} pack(s) declared but this build has no pack loader; "
         f"schemas/pack.py does not implement §7.4 (BUILD-PLAN item 3)"
     )
+
+
+def unresolved_predicates(rules: Iterable[Rule]) -> tuple[str, ...]:
+    """Rule ids whose predicate the closed registry does not contain (§7.5).
+
+    **This is the real check, and it is testable without a pack loader.** The
+    check below can only ever feed it an empty list today, but the resolution
+    logic is exercised directly by `tests/test_preflight_checks.py` with
+    constructed rules — so when the loader lands (BUILD-PLAN item 9) this
+    function does not get written, only called with something in it.
+
+    Returns ids rather than raising: preflight reports, it does not abort.
+    """
+    # A `Rule` cannot hold an unregistered predicate — the field is typed to the
+    # enum, so an unknown name fails at load. What can still happen is a rule
+    # with no predicate at all reaching a stage that needs one, which is what
+    # this reports.
+    return tuple(
+        rule.id
+        for rule in rules
+        if rule.predicate is None and rule.stage in _PREDICATE_REQUIRING_STAGES
+    )
+
+
+def unresolved_semantic_types(rules: Iterable[Rule]) -> tuple[str, ...]:
+    """Rule ids that bind to no semantic type at all (§7.5).
+
+    Same shape as above. An unregistered *name* cannot survive load, because
+    `applies_to.semantic_type` is typed to the closed registry; what this
+    catches is a rule that binds to nothing, which cannot be applied to a
+    column and would silently never fire.
+    """
+    return tuple(
+        rule.id
+        for rule in rules
+        if rule.applies_to is None and rule.stage in _PREDICATE_REQUIRING_STAGES
+    )
+
+
+@implements("packs.predicates_exist_in_registry")
+def predicates_exist_in_registry(context: CheckContext) -> Outcome:
+    """§7.5. Vacuous while no pack loader exists — see `declared_packs_resolvable`."""
+    if context.manifest.packs:
+        return unavailable(
+            f"{len(context.manifest.packs)} pack(s) declared but this build has "
+            f"no pack loader, so no rule can be read to check its predicate "
+            f"(BUILD-PLAN item 9)"
+        )
+
+    unresolved = unresolved_predicates(())
+    if unresolved:  # pragma: no cover - unreachable until a loader supplies rules
+        return failed(f"{len(unresolved)} rule(s) name no predicate: {', '.join(unresolved)}")
+
+    return passed(
+        f"no packs declared, so there are no rules to check against the "
+        f"{len(Predicate)} registered predicates"
+    )
+
+
+@implements("packs.semantic_types_resolve")
+def semantic_types_resolve(context: CheckContext) -> Outcome:
+    """§7.5. Vacuous on the same terms, and for the same reason."""
+    if context.manifest.packs:
+        return unavailable(
+            f"{len(context.manifest.packs)} pack(s) declared but this build has "
+            f"no pack loader, so no rule can be read to check its "
+            f"applies_to.semantic_type (BUILD-PLAN item 9)"
+        )
+
+    unresolved = unresolved_semantic_types(())
+    if unresolved:  # pragma: no cover - unreachable until a loader supplies rules
+        return failed(f"{len(unresolved)} rule(s) bind to no semantic type")
+
+    return passed("no packs declared, so there are no rule bindings to resolve")
 
 
 @implements("governance.external_references_declare_license_mode")
