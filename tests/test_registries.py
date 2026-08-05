@@ -54,7 +54,18 @@ def test_the_pii_flag_may_not_acquire_a_default() -> None:
     parameters = inspect.signature(SemanticType.__new_member__).parameters
 
     for name in ("value", "is_pii"):
-        assert parameters[name].default is inspect.Parameter.empty
+        # Named first, then required. The two weakenings look different: a
+        # default keeps the name, while collapsing to *args removes it, and
+        # without the first assertion the second reports a KeyError that reads
+        # like a broken test rather than a removed guarantee.
+        assert name in parameters, (
+            f"SemanticType.__new__ no longer names {name}; a signature that "
+            f"absorbs it into *args accepts a member declaring nothing"
+        )
+        assert parameters[name].default is inspect.Parameter.empty, (
+            f"SemanticType.__new__ gives {name} a default, so the next type "
+            f"added inherits a classification nobody chose"
+        )
 
 
 def test_every_type_is_classified() -> None:

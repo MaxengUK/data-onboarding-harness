@@ -100,6 +100,16 @@ def test_none_of_the_three_may_acquire_a_default() -> None:
     parameters = inspect.signature(Predicate.__new_member__).parameters
 
     for name in ("value", "implementation", "params", "scope"):
+        # Named-and-required, checked separately, because the two weakenings
+        # look different: a default keeps the name, while collapsing the
+        # signature to *args removes it. Asserting membership first turns the
+        # second into a legible failure rather than a KeyError that reads like a
+        # broken test.
+        assert name in parameters, (
+            f"Predicate.__new__ no longer names {name}. A signature that "
+            f"absorbs its declarations into *args accepts a member that "
+            f"declares nothing, which is what naming them prevents"
+        )
         assert parameters[name].default is inspect.Parameter.empty, (
             f"Predicate.__new__ gives {name} a default, so a member can be "
             f"declared without it and inherit an answer nobody chose"
