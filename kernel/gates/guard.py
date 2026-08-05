@@ -13,6 +13,8 @@ import re
 import sys
 from pathlib import Path
 
+from kernel.checksums import is_valid_tckn, is_valid_vkn, normalise_msisdn
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 EXCLUDED_DIR_NAMES = {
@@ -91,39 +93,24 @@ ISO_TIMESTAMP_PATTERN = re.compile(
 TIMESTAMP_FILL = "~"
 
 
+# The three below delegate to `kernel.checksums`, which the `has_checksum`
+# predicate (§7.5) also uses. The names differ on purpose: the guard asks
+# "should I assume this is real and refuse the commit", the predicate asks "is
+# this well-formed". Same arithmetic, two questions, and the guard's wording
+# should keep saying which one it is asking.
 def is_authentic_tckn(tckn: str) -> bool:
-    """Geçerli bir TCKN algoritmasına uyup uymadığını kontrol eder."""
-    if len(tckn) != 11 or not tckn.isdigit() or tckn[0] == '0':
-        return False
-    digits = [int(d) for d in tckn]
-    sum_odd = sum(digits[0:9:2])
-    sum_even = sum(digits[1:8:2])
-    check_10 = ((sum_odd * 7) - sum_even) % 10
-    check_11 = sum(digits[0:10]) % 10
-    return check_10 == digits[9] and check_11 == digits[10]
+    """Whether a TCKN is checksum-valid, i.e. one that could have been issued."""
+    return is_valid_tckn(tckn)
 
 
 def is_authentic_vkn(vkn: str) -> bool:
-    """Vergi Kimlik No checksum (GİB mod-9 / mod-10 algorithm)."""
-    if len(vkn) != 10 or not vkn.isdigit():
-        return False
-    digits = [int(d) for d in vkn]
-    total = 0
-    for i in range(9):
-        tmp = (digits[i] + (9 - i)) % 10
-        if tmp == 0:
-            total += 9
-        else:
-            contrib = (tmp * (2 ** (9 - i))) % 9
-            total += contrib if contrib != 0 else 9
-    check_digit = (10 - (total % 10)) % 10
-    return check_digit == digits[9]
+    """Whether a VKN is checksum-valid under the GİB mod-9 / mod-10 algorithm."""
+    return is_valid_vkn(vkn)
 
 
 def normalize_msisdn(raw: str) -> str:
-    """Strip separators and any national prefix, keeping the 10-digit subscriber number."""
-    digits_only = re.sub(r'\D', '', raw)
-    return digits_only[-10:] if len(digits_only) >= 10 else digits_only
+    """Strip separators and any national prefix, keeping the 10 subscriber digits."""
+    return normalise_msisdn(raw)
 
 
 def is_authentic_msisdn(raw: str) -> bool:
