@@ -1,10 +1,11 @@
 # CLAUDE.md — MAXENG Data Onboarding Harness
 
 **Repo:** `data-onboarding-harness`
-**Version:** 0.5.4 (draft)
+**Version:** 0.6.0 (draft)
 **Status:** Pre-Gate 0
 **Owner:** MAXENG
 **Changelog:**
+0.6.0 — **The canonical schema becomes a first-class artifact (§7.6).** §7.1 has carried `canonical_schema: automotive/sales_v2` since the beginning and §6 has always said `map` resolves the column map "→ canonical schema", but nothing said what a canonical schema *is*, where it lives, or who resolves it. Preflight found the gap by running into it three times: `types_match_semantic_types`, `declared_key_present` and `max_timestamp_within_freshness_window` all stop at the same missing link, because `column_map` maps a source name to a canonical *field name* and nothing said what a canonical field is. So §7.5's "rules bind to semantic types" had no chain to travel and §13's `reuse_ratio` had nothing to measure. Versioned as a minor rather than a patch for the same reason 0.5.0 was: it introduces an artifact class with its own directory, its own resolver and its own lifecycle, and it changes what must accompany a manifest for a run to be possible at all. Three things ride along: §6.2.2 gains **`the declared canonical schema resolves`**, because a check registry that is a superset of this table loses the invariant that no check exists outside it; §7.5 records that semantic types are **kernel-owned including sector-specific ones**, which §8 requires rather than merely prefers; and each type now **declares whether it is PII-typed as part of being a member**, closing a hole where a new type defaulted to non-PII in silence and became eligible for §8.1 export.
 0.5.4 — **Two kinds of check, and a report that says which is which.** §6.2.2 lists "DPA reference recorded" beside "declared encoding actually decodes the source" as though they were the same act. They are not: one measures an observable fact, the other confirms that somebody made a written commitment, and only the first is evidence of anything being *true*. Both belong in preflight — a missing DPA reference must stop a run — but a client reading `restore point: passed` must not conclude that a restore was tested. §6.2.2 now splits every check into a **verification class** and a **declaration class**, requires the Preflight Report to show the class per row, and names the three checks that are declaration class today. The distinction is not cosmetic: it is the difference between a report that documents what was measured and one that launders a promise into a finding.
 0.5.3 — **Two versions, deliberately not one.** The run manifest now records the **spec version** beside the kernel version, and §12 says plainly that the two advance independently. They answer different questions: the kernel version identifies the code that produced a run's bytes, the spec version identifies the set of constitutional decisions that code was written against. Several kernel releases can sit against one spec version, and a spec change that no code has caught up with yet is an ordinary state rather than an error — so holding them in lockstep would buy bookkeeping and nothing else. `pyproject.toml` carries the package version and this document carries the spec version; the gap between them is the design rather than drift, and a comment there says so to whoever next reaches for a sync.
 0.5.2 — **The audit store's integrity control had no record to rest on.** §4.2.6 puts the audit store under §4.2.5's three layers, and layer 3 — the content hash, the only one of the three that carries weight — requires the expected hash to be held *outside* the store it governs. §12 named the record that does this for Bronze (partition ids and content hashes in the run manifest) and named nothing for audit segments, so the control was mandated with nothing to enforce it from. §12 now records **audit segment ids and content hashes** beside Bronze's, and states the consequence plainly: a segment absent from the run manifest is **unreadable**, not merely unrecorded — there is nothing to verify it against and nothing to notice it is missing. One distinction comes with it, because it falls out of §4.2 rather than being invented here: Bronze partition references in a run manifest may point at partitions written by *earlier* runs — that is what read-once and rule backtesting depend on — while audit segment references may not, because a run reads Bronze and writes audit. Found while implementing the audit store, which continues the pattern: every spec-level error so far has been found by trying to write the code, none by re-reading the document.
@@ -313,7 +314,7 @@ Grouped by category. Each check declares a severity: `blocker` stops the run, `w
 | Category | Checks | Typical severity |
 |---|---|---|
 | **Connectivity & privilege** | Source reachable; principal is read-only; grants match declared scope and no wider; target writable; credential expiry exceeds estimated run duration | blocker |
-| **Schema conformance** | Every mapped column exists; types compatible with bound semantic types; declared key or unique combination present; **no undeclared column carrying a PII-typed shape** | blocker |
+| **Schema conformance** | The declared canonical schema resolves (§7.6); every mapped column exists; types compatible with bound semantic types; declared key or unique combination present; **no undeclared column carrying a PII-typed shape** | blocker |
 | **Encoding & locale** | Declared encoding actually decodes the source without replacement characters; collation consistent; declared locale matches observed date and decimal shapes | blocker |
 | **Volume & freshness** | Non-empty; row count within declared bounds; max timestamp within the freshness window; no sign of a truncated extract | blocker for empty/truncated, warning otherwise |
 | **Packs & rules** | All declared packs resolvable at declared versions; every referenced predicate exists in the registry; every `applies_to.semantic_type` resolves; no `pass_through`-corroborated rule above the `client` layer (§9.6) | blocker |
@@ -517,7 +518,39 @@ Rationale: a DSL means a parser to maintain and a sandbox to get right, and dyna
 
 **Semantic type registry.** Rules bind to semantic types, never to column names — `applies_to: { semantic_type: phone_mobile }`, not `applies_to: { column: "Müşteri GSM" }`. Column names do not survive the trip from one client to the next; semantic types do. This binding is the mechanism `reuse_ratio` actually measures.
 
-Each semantic type declares whether it is PII-typed, which drives the §8 egress rules and the §6.2.2 undeclared-column check.
+Each semantic type declares whether it is PII-typed, which drives the §8 egress rules and the §6.2.2 undeclared-column check. **That declaration is part of being a member, not a list kept beside the registry.** A separate set of PII types means a type added without being added to the set defaults to non-PII in silence — and non-PII types are eligible for §8.1 distinct-value export, so the failure mode is a forgotten line making a column's values exportable. Declaring it per member makes the omission impossible rather than reviewable.
+
+**Sector-specific semantic types live in the kernel registry too, and this is a §8 requirement rather than a preference.** A sector pack references types; it never defines them. §8 permits semantic type labels to cross the boundary *because MAXENG owns the word list and ships it in the release*, so no member can ever carry client content. A pack that could add a member at runtime would put a string authored outside the release into a permitted egress class — at which point the vocabulary is no longer closed and the §8 permission it rests on is gone.
+
+This does not put client variance in the kernel (P3). The split is the one §7.5 already draws for transforms: **the type is kernel-owned, its shape is pack-owned.** `vehicle_plate` is a concept; "a TR plate looks like 99 ABC 123" is `tr-core`'s — and note the 99, which is not a province code, because the guard scans this document too. The usable test when adding one: *a thing that can only be described by naming a client is not a semantic type.*
+
+There is a §13 consequence worth stating, because it decides whether the layering works at all. Rules bind to types, so the granularity of this list is where `reuse_ratio` is really set. A list fine-grained enough to give every client column its own type would make every rule client-specific and the ratio would never rise, while the layering would look correct the whole time.
+
+### 7.6 Canonical schema — the target both sides map onto
+
+`manifest.canonical_schema` names one, `map` resolves the column map onto it, and `emit` writes it. It is the artifact that makes a `column_map` mean something: the map's right-hand side is a canonical *field name*, and without a schema saying what those fields are, the chain from a client's column to a semantic type has no middle.
+
+**Minimum shape.** Fields with a semantic type and a required flag, a declared key, and the field freshness is measured against:
+
+```yaml
+id: energy/generation_v1          # matches manifest.canonical_schema exactly
+fields:
+  - { name: plant_code,     semantic_type: opaque_key,      required: true }
+  - { name: reading_at,     semantic_type: date,            required: true }
+  - { name: generation_mwh, semantic_type: energy_quantity, required: true }
+key: [plant_code, reading_at]
+freshness_field: reading_at
+```
+
+Three shape decisions, each load-bearing:
+
+- **The version is part of the id, not a field.** `generation_v1` is a name; `v2` is a *different schema*, not a new version of this one. Schema evolution is therefore a new artifact and a deliberate re-map, never an in-place edit that silently changes what a client's existing output means.
+- **`freshness_field` is declared, never inferred.** The §6.2.2 freshness check needs to know which field carries time. Inferring it from "the only field with `semantic_type: date`" works until a second one appears — and `sales_v2` has `order_date` beside `delivery_date`, so the second one is the normal case, not the edge case.
+- **No physical types yet.** `emit` will need them to create a target table; until a target adapter exists there is nothing to consume them, and a field with no reader is a field that drifts.
+
+**Resolution is exact, and the resolver is deliberately not a pack loader.** One id resolves to exactly one artifact under `canonical/`. No layering, no merge, no precedence, no version ranges, no `overrides`. If two locations could supply one id that is an error rather than a precedence decision.
+
+The distinction is not tidiness, and the reason it holds is worth keeping: **rules accumulate, canonical schemas do not.** §7.4's layering exists because a `client` rule is meant to refine a `core` one — that accumulation *is* the reuse mechanism §13 measures. A canonical schema is the opposite kind of thing: the fixed target both sides map onto. Give it layering and a client pack can quietly change what `sales_v2` means, at which point two engagements produce different "canonical" output under one name — which is precisely the property canonical output exists to provide. For the same reason canonical schemas live in their own `canonical/` directory rather than under `packs/`: co-locating them would invite the pack loader's precedence rules to reach them.
 
 ---
 
