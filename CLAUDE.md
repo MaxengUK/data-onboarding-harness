@@ -1,10 +1,11 @@
 # CLAUDE.md — MAXENG Data Onboarding Harness
 
 **Repo:** `data-onboarding-harness`
-**Version:** 0.6.2 (draft)
+**Version:** 0.6.3 (draft)
 **Status:** Pre-Gate 0
 **Owner:** MAXENG
 **Changelog:**
+0.6.3 — **Canonical entities are named by role, and grain is declared rather than implied (§7.6).** `canonical/` is deliberately not layered, so one schema has to fit every client in a sector — and it can only do that by naming things at the level where clients agree. An energy client measures at the plant, another at the inverter, a third at the string, a fourth at the meter; all four are correct and all four are the same *role*, which is why IEC 61968-9's CIM defines `UsagePoint` independent of granularity. The Gate 0 schema's `plant_code` was one client's topology written into a shared artifact, and is now `measurement_point_id`. The dealership schema carries the same unanswered question — vehicle, order line, or delivery — and answering it by naming is how a canonical schema acquires a client's org chart. Granularity moves to a **grain** block rather than into the key, because level is an input to *rules* ("generation must not exceed nameplate capacity" needs to know whether the point is a plant or a string) and not to identity. Grain also carries `layout`, which makes the wide-format assumption explicit for the first time: under `layout: long` the same readings arrive as `(measurement_point_id, reading_at, measurement_type, value)` and the key gains a column, while the entity and the period do not change.
 0.6.2 — **§7.2 contradicted §7.5, and two confidence fields could contradict their own evidence.** The authored-rule example carried `expression: "regex_match(value, '…')"` while §7.5 says rule expressions are not a language and §0 forbids `eval`/`exec` — so the string could never have been evaluated by anything that respects this document. Corrected to `predicate` + `params`, with the accompanying note that **params carry names, not content**: `pattern: tr_msisdn` names a registered pattern rather than supplying a regex, because a pack-authored regex is executable content from outside the release and would end §7.5's central claim. The stale `tr_msisdn_canonical` transform name is fixed to the registry's `canonicalize_phone`. Separately, §7.3 showed `band` as an authored field and §9.4 implied the same of `derived_from_client_data_only`; both are now **computed with no writable field at all**, since a draft pack that can assert `money` over a 0.91 hold rate defeats the circularity mitigation the band belongs to — and "it is computed" is not a control while a write path remains. §11 gains the two lifecycle invariants the rule schema now enforces: `enforced` requires a predicate, and a discovered rule requires a named signature reference before it can load as confirmed or enforced.
 0.6.1 — **§0 gains a disclosure rule: docstrings are a published surface.** `schemas/json/*.json` is generated from class docstrings, and §14 ships those files to the client inside the OCI image — so a design rationale written in a docstring is disclosed to every engagement, while reading like an internal note to whoever wrote it. An audit of the generated schemas found eight such descriptions, all explaining *why we built it this way* rather than what the field is. Two more findings sit beside it and are recorded in `STATUS.md` rather than here: the schemas for rules and packs published a shape this spec does not recognise with nothing saying so, and it is still undecided whether **this document** belongs in the image at all — §5 puts `CLAUDE.md` at the repository root, and a naive image build would ship §1's economics, §2.1's legal posture and §16's open counsel questions to the client they concern.
 0.6.0 — **The canonical schema becomes a first-class artifact (§7.6).** §7.1 has carried `canonical_schema: automotive/sales_v2` since the beginning and §6 has always said `map` resolves the column map "→ canonical schema", but nothing said what a canonical schema *is*, where it lives, or who resolves it. Preflight found the gap by running into it three times: `types_match_semantic_types`, `declared_key_present` and `max_timestamp_within_freshness_window` all stop at the same missing link, because `column_map` maps a source name to a canonical *field name* and nothing said what a canonical field is. So §7.5's "rules bind to semantic types" had no chain to travel and §13's `reuse_ratio` had nothing to measure. Versioned as a minor rather than a patch for the same reason 0.5.0 was: it introduces an artifact class with its own directory, its own resolver and its own lifecycle, and it changes what must accompany a manifest for a run to be possible at all. Three things ride along: §6.2.2 gains **`the declared canonical schema resolves`**, because a check registry that is a superset of this table loses the invariant that no check exists outside it; §7.5 records that semantic types are **kernel-owned including sector-specific ones**, which §8 requires rather than merely prefers; and each type now **declares whether it is PII-typed as part of being a member**, closing a hole where a new type defaulted to non-PII in silence and became eligible for §8.1 export.
@@ -546,23 +547,38 @@ There is a §13 consequence worth stating, because it decides whether the layeri
 
 `manifest.canonical_schema` names one, `map` resolves the column map onto it, and `emit` writes it. It is the artifact that makes a `column_map` mean something: the map's right-hand side is a canonical *field name*, and without a schema saying what those fields are, the chain from a client's column to a semantic type has no middle.
 
-**Minimum shape.** Fields with a semantic type and a required flag, a declared key, and the field freshness is measured against:
+**Entities are named by the role they play, never by the client's organisational level.** `canonical/` is not layered — §7.4's precedence applies to packs, and giving it to canonical schemas would let one engagement redefine what a name means. One schema therefore has to fit every client in a sector, and the only way it can is to name things at the level where clients agree.
+
+Clients disagree about level constantly, and not because anyone is wrong. An energy client measures at the plant, another at the inverter, a third at the string, a fourth at the meter — all four are correct, all four are the same *role*: the thing readings are attributed to. IEC 61968-9's CIM calls it a `UsagePoint` and defines it exactly that way, independent of granularity, for this reason. So the field is `measurement_point_id`, not `plant_code`: the second name commits the schema to one client's topology and silently misfits the other three.
+
+The dealership schema carries the same unresolved question — is a row a vehicle, an order line, or a delivery? Naming it before answering it is how a canonical schema acquires a client's org chart.
+
+**Granularity is a separate declaration, not part of the key.** Which level a measurement point actually sits at is an engagement fact, and it is an input to rules rather than to identity: "generation must not exceed nameplate capacity" needs to know whether the point is a plant or a string, while "one reading per point per instant" does not. Putting the level into the key would make identity vary by client, which is the thing role-naming exists to prevent.
+
+**Minimum shape.** Fields with a semantic type and a required flag, a declared key, the field freshness is measured against, and a **grain** — what one row is:
 
 ```yaml
 id: energy/generation_v1          # matches manifest.canonical_schema exactly
+grain:
+  entity: measurement_point       # the role, not the client's level
+  period: instant                 # instant | interval | none
+  layout: wide                    # wide | long
 fields:
-  - { name: plant_code,     semantic_type: opaque_key,      required: true }
-  - { name: reading_at,     semantic_type: date,            required: true }
-  - { name: generation_mwh, semantic_type: energy_quantity, required: true }
-key: [plant_code, reading_at]
+  - { name: measurement_point_id, semantic_type: opaque_key,      required: true }
+  - { name: reading_at,           semantic_type: date,            required: true }
+  - { name: generation_mwh,       semantic_type: energy_quantity, required: true }
+key: [measurement_point_id, reading_at]
 freshness_field: reading_at
 ```
 
-Three shape decisions, each load-bearing:
+`layout` belongs to the grain because wide and long are a statement about what one row is, not about which fields exist. Under `layout: long` the same readings arrive as `(measurement_point_id, reading_at, measurement_type, value)` and the key gains `measurement_type` — the entity and the period are unchanged, the row is not.
+
+Four shape decisions, each load-bearing:
 
 - **The version is part of the id, not a field.** `generation_v1` is a name; `v2` is a *different schema*, not a new version of this one. Schema evolution is therefore a new artifact and a deliberate re-map, never an in-place edit that silently changes what a client's existing output means.
 - **`freshness_field` is declared, never inferred.** The §6.2.2 freshness check needs to know which field carries time. Inferring it from "the only field with `semantic_type: date`" works until a second one appears — and `sales_v2` has `order_date` beside `delivery_date`, so the second one is the normal case, not the edge case.
 - **No physical types yet.** `emit` will need them to create a target table; until a target adapter exists there is nothing to consume them, and a field with no reader is a field that drifts.
+- **The grain is declared, not inferred from the key.** A key says which rows are distinct; it does not say what a row *is*, and the two come apart exactly where it matters. `key: [chassis_no]` reads as "one row per vehicle" until a vehicle is sold twice, at which point the schema was carrying an assumption nobody wrote down.
 
 **Resolution is exact, and the resolver is deliberately not a pack loader.** One id resolves to exactly one artifact under `canonical/`. No layering, no merge, no precedence, no version ranges, no `overrides`. If two locations could supply one id that is an error rather than a precedence decision.
 
