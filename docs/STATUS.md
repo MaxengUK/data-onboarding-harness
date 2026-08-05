@@ -1,7 +1,7 @@
 # STATUS — 4–5 August 2026
 
-**Reflects:** `CLAUDE.md` v0.6.0 · repo `MaxengUK/data-onboarding-harness` @ `545c1af`
-**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. Third session (5 Aug): **item 5 framed and item 3a closed** — the preflight framework, digest and CLI, then the canonical schema artifact preflight had been stopping at. 16 of 30 checks live, the rest registered and blocking. `ingest`, `profile` and `normalize` remain deliberately out of scope: what exists is the storage floor those stages will stand on, plus the gate that decides whether they may start.
+**Reflects:** `CLAUDE.md` v0.6.2 · repo `MaxengUK/data-onboarding-harness` @ `b8f7d8f`
+**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. Third session (5 Aug): **item 5 framed, items 3a and 3b closed** — the preflight framework, digest and CLI, then the canonical schema artifact preflight had been stopping at. 18 of 30 checks live, the rest registered and blocking. `ingest`, `profile` and `normalize` remain deliberately out of scope: what exists is the storage floor those stages will stand on, plus the gate that decides whether they may start.
 **This is a living document.** Sections are updated in place as items close, not appended to. Where a section records a decision rather than a state, it says so.
 
 ---
@@ -13,16 +13,16 @@
 | 1 | Repo skeleton, Pydantic schemas, JSON Schema, CI guard | 1.5 | ✅ Closed |
 | 2 | Evidence emitter, egress allowlist, Leg 1 | 1.0 | ✅ Closed (Leg 1 at unit level; end-to-end deferred to Gate 0 close) |
 | 3a | Canonical schema artifact + resolver + semantic type binding chain | 1.5 | ✅ Closed. 30 tests; opened 3 preflight checks and made a 4th genuinely N/A |
-| 3b | Predicate registry + §7.2 rule schema | 0.5 | ⬜ **Next** |
+| 3b | Predicate registry + §7.2 rule schema | 0.5 | ✅ Closed. 31 tests; opened the last two pack checks that do not need a loader |
 | 4a | Path abstraction (`kernel/storage`) + Bronze store (`kernel/bronze`) | 1.0 | ✅ Closed. 30 tests; each control verified by breaking it |
 | 4b | Audit store (`kernel/audit`) + `AuditConfig` + shared serialiser | 1.0 | ✅ Closed. 35 tests; each control verified by breaking it |
 | — | **Run manifest** (`kernel/run_manifest`) — unplanned, see §4b.3 | 0.5 | ✅ Closed. 13 tests |
-| 5 | Preflight — framework, digest, CLI, and the checks today allows | 2.0 → 1.0 | ◐ **Framed: 16 of 30 checks implemented.** All 30 registered; the other 14 report `unavailable`. See §5a |
+| 5 | Preflight — framework, digest, CLI, and the checks today allows | 2.0 → 1.0 | ◐ **Framed: 18 of 30 checks implemented.** All 30 registered; the other 12 report `unavailable`. See §5a |
 | 6–16 | Arming, walking skeleton, tr-core, discovery, Gate 0/1 | 24 | ⬜ Not started |
 
-259 tests, all green. Three unplanned pieces have been added across the sessions and each closed a real defect: guard hardening, the schema sync test, and the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
+297 tests, all green. Three unplanned pieces have been added across the sessions and each closed a real defect: guard hardening, the schema sync test, and the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
 
-**Preflight changed how the plan is shaped, not just what is in it.** `BUILD-PLAN.md` §2.1 now carries a rule: an item that brings a capability also brings the preflight checks depending on it, and the remaining unimplemented checks are distributed across items 3b, 7, 9, 17 and 19 rather than collected into a "finish preflight" item. A backlog item would be the easiest thing in the plan to defer, and deferring it would leave runs blocked by checks whose enabling capability already shipped — which is where the pressure to weaken "unavailable blocks" would come from.
+**Preflight changed how the plan is shaped, not just what is in it.** `BUILD-PLAN.md` §2.1 now carries a rule: an item that brings a capability also brings the preflight checks depending on it, and the remaining unimplemented checks are distributed across items 7, 9, 17 and 19 rather than collected into a "finish preflight" item. A backlog item would be the easiest thing in the plan to defer, and deferring it would leave runs blocked by checks whose enabling capability already shipped — which is where the pressure to weaken "unavailable blocks" would come from.
 
 ---
 
@@ -37,11 +37,12 @@ The session's highest-value output. Each was invisible until code forced the que
 | — | **Exporter wrote CRLF on Windows, LF on Linux.** Same models, different bytes by machine — a silent P2 violation that `.gitattributes` masked from `git diff` entirely. | `newline="\n"` plus explicit trailing newline. Would never have been found by inspection |
 | — | **Cardinality threshold measured the wrong quantity.** Field-value hashes were gated on dataset cardinality, but reversibility depends on the size of the *value space*. An MSISDN column clears any plausible threshold while remaining trivially sweepable (~10⁹). | Field-value hashes denied outright. Only artifact-level content hashes survive. §8 wording corrected |
 | — | **The pre-commit hook was never installed.** `pre-commit run --all-files` had been reporting Passed the whole time — it runs the hook manually, not through git's commit path. | `pre-commit install`, then verified by observing an actual commit get **blocked** |
-| — | **`schemas/rule.py` and `schemas/pack.py` do not implement §7.2–§7.4.** Both predate the schemas the spec now describes and share almost nothing with them: no `applies_to`, `expression`, `repair` or `provenance`; a `layer: L1_structural…` enum that appears nowhere in CLAUDE.md; no pack `layer`, `overrides` or `corroborated_by`, which are exactly the fields §6.2.2's pack checks would need. | Not patched — closing it is BUILD-PLAN item 3, and a rule schema written before the predicate registry would be a third guess. Docstrings at the head of both files say they are not implementations and that no code may be written against them; preflight reports all four pack checks `unavailable` rather than binding to fields the spec does not recognise |
+| — | ~~**`schemas/rule.py` and `schemas/pack.py` do not implement §7.2–§7.4.**~~ Half closed in 3b: `rule.py` is rewritten and its warning removed. `pack.py` still does not implement §7.4 and keeps a client-worded provisional notice — the pack loader is item 9. Original finding:** Both predate the schemas the spec now describes and share almost nothing with them: no `applies_to`, `expression`, `repair` or `provenance`; a `layer: L1_structural…` enum that appears nowhere in CLAUDE.md; no pack `layer`, `overrides` or `corroborated_by`, which are exactly the fields §6.2.2's pack checks would need. | Not patched — closing it is BUILD-PLAN item 3, and a rule schema written before the predicate registry would be a third guess. Docstrings at the head of both files say they are not implementations and that no code may be written against them; preflight reports all four pack checks `unavailable` rather than binding to fields the spec does not recognise |
 | — | **§7.1 named a canonical schema that did not exist.** `canonical_schema: automotive/sales_v2` has been in the manifest since 0.1, and §6 has always said `map` resolves the column map onto it, but no section said what one *is*. So `column_map`'s right-hand side named nothing, §7.5's "rules bind to semantic types" had no chain to travel, and §13's `reuse_ratio` had nothing to measure. Three preflight checks stopped at the same link. | §7.6 defines the artifact, its directory and its exact-match resolver; §6.2.2 gains `the declared canonical schema resolves`. CLAUDE.md → 0.6.0 |
+| — | **§7.2 contradicted §7.5 in the same document.** The authored-rule example carried `expression: "regex_match(value, '…')"` while §7.5 says rule expressions are not a language and §0 forbids `eval`/`exec` — so the string could never have been evaluated by anything respecting this document. Its `transform: tr_msisdn_canonical` was equally stale; the registry holds `canonicalize_phone`. | §7.2 rewritten to `predicate` + `params`, with the rule that **params carry names, not content**: a pack-authored regex is executable content from outside the release. CLAUDE.md → 0.6.2 |
 | — | **§12 named no record for audit segment hashes.** §4.2.6 puts the audit store under §4.2.5's three layers, and layer 3 — the only one that carries weight — needs the expected hash held *outside* the store. §12's run manifest enumerated Bronze partitions and stopped there, so the control was mandated with nothing to enforce it from. | Run manifest records audit segment ids and content hashes beside Bronze's; an object it does not name is **unreadable**, not merely unrecorded. CLAUDE.md → 0.5.2 |
 
-**The pattern, now stable across nine findings:** every serious spec-level error was a *missing concept*, not a wording error — and each was found by trying to write the code, not by re-reading the document. B1 (Bronze), B5 (audit record) and the §12 omission are the same shape: a section that was internally coherent and silently depended on something no other section provided.
+**The pattern, now stable across ten findings:** every serious spec-level error was a *missing concept*, not a wording error — and each was found by trying to write the code, not by re-reading the document. B1 (Bronze), B5 (audit record) and the §12 omission are the same shape: a section that was internally coherent and silently depended on something no other section provided.
 
 **The corollary, learned three times today:** a control that passes proves nothing. The guard, the schema sync test, and the pre-commit hook each only earned trust when observed to *fail* where failure was correct.
 
@@ -190,7 +191,7 @@ That somewhere was named in §12 for Bronze and named nowhere for audit, which i
 
 ## 5a. Built this session — preflight (item 5, partial by decision)
 
-`kernel/stages/preflight/` and `harness preflight`. 59 tests at the time; item 3a then added a check and implemented four. **16 of §6.2.2's 30 checks are implemented**; the other 14 are registered and report `unavailable`. On the minimal manifest that is 14 `passed`, 2 `not_applicable`, 14 `unavailable`, giving 11 blocking and 3 warnings — two of the sixteen pass vacuously, on an empty pack list and an empty reference list, and `BUILD-PLAN.md` §2.1 records that both stop passing the moment anything is declared.
+`kernel/stages/preflight/` and `harness preflight`. 59 tests at the time; item 3a then added a check and implemented four. **18 of §6.2.2's 30 checks are implemented**; the other 12 are registered and report `unavailable`. On the minimal manifest that is 16 `passed`, 2 `not_applicable`, 12 `unavailable`, giving 9 blocking and 3 warnings — four of the eighteen pass vacuously, on an empty pack list and an empty reference list, and `BUILD-PLAN.md` §2.1 records that both stop passing the moment anything is declared.
 
 **A gap inventory came before any code**, and it is what set the scope. Working through the seven categories check by check produced three kinds of gap, and keeping them apart is what stopped preflight from becoming half stub with nobody able to say which half:
 
@@ -233,7 +234,7 @@ This is not a placeholder for verification arriving later. Some facts are not ob
 
 ### 5a.4 Where this build actually stands
 
-**Even the narrowest manifest cannot reach `ready`**, and a test asserts it. File source, no packs, no external references, every implemented check green — still blocked, by the 14 nothing implements. There is no flag that shortens that, which is the point.
+**Even the narrowest manifest cannot reach `ready`**, and a test asserts it. File source, no packs, no external references, every implemented check green — still blocked, by the 12 nothing implements. There is no flag that shortens that, which is the point.
 
 That is not a failure of item 5, it is item 5 reporting honestly. §6.2.4 sells preflight as the cheapest first contact with a client's data, answering "can this even be connected to, and what is missing" — a report that names its own gaps per check *is* that deliverable.
 
@@ -257,7 +258,7 @@ The alternative was to bring the predicate registry, the rule schema and the pac
 
 ### 5a.6 Not built, by decision
 
-`normalize`, retention and GC for either store, S3/Azure backends, arming (item 6), and the 14 unimplemented checks. Two smaller ones worth naming because they will be reached for: **`StoragePath` gained no members** — the source is read whole, inheriting the single-node ceiling §4a.1 already documents, and a `read_prefix(n)` is what the first remote backend or first genuinely large extract will force. And **`harness arm` now refuses loudly** rather than printing a success line; a gate that looks armed and authorises nothing is worse than an absent command.
+`normalize`, retention and GC for either store, S3/Azure backends, arming (item 6), and the 12 unimplemented checks. Two smaller ones worth naming because they will be reached for: **`StoragePath` gained no members** — the source is read whole, inheriting the single-node ceiling §4a.1 already documents, and a `read_prefix(n)` is what the first remote backend or first genuinely large extract will force. And **`harness arm` now refuses loudly** rather than printing a success line; a gate that looks armed and authorises nothing is worse than an absent command.
 
 ---
 
@@ -297,6 +298,42 @@ Found the way these things get found — the guard blocked a commit adding a fre
 Fixed rather than worked around in the fixture, because ISO timestamps are unavoidable here — audit records, run manifests and freshness columns all carry them — so the false positive would have recurred constantly. **A control that cries wolf gets disabled**, and this one is the last thing between a real identifier and a public repository. Timestamps are blanked in place rather than skipped by line: a row carrying both a timestamp and a plate is the normal shape of a vehicle record.
 
 **§0's literal rule then demonstrated itself twice.** The first attempt at the fix wrote an example timestamp in a comment and a plate in a test; the guard blocked both. Both are built at runtime now. The rule reads as pedantic until the guard blocks the very commit that fixes the guard.
+
+### 5c. Built this session — the predicate registry and the rule schema (item 3b)
+
+`kernel/predicates.py`, `kernel/checksums.py`, a rewritten `schemas/rule.py`, and the last two pack checks that do not need a loader. 31 tests.
+
+**The predicate registry declares three things structurally, not one.** `SemanticType`'s pattern extended: `__new__` takes implementation, parameter contract and **scope** positionally, so a member written as `FOO = "foo"` fails at class creation. Scope earns its place by being the one that would otherwise default silently and fail latest — a column-scope predicate handed a single cell returns a confident, meaningless answer rather than an error.
+
+**Params carry names, not content**, and this is what keeps §7.5's central claim true. `matches_pattern` takes a registered `PatternName`; a pack never supplies a regex, because that would be executable content authored outside the release — and a catastrophic-backtracking one is an availability incident in a client's environment rather than a bug in ours. Patterns are locale-neutral in this build; the Turkish shapes arrive with `tr-core` as a deliberate kernel change.
+
+**Three lifecycle invariants moved from convention into the schema:**
+
+| Invariant | What it stops |
+|---|---|
+| `enforced` requires a predicate | A rule that quarantines with nothing to evaluate (P7) |
+| A discovered rule needs `provenance.signature_ref` to load as confirmed or enforced | `state: proposed` becoming `state: enforced` in a text editor (§11, P4) |
+| `repair.reversible: false` does not load | A setting §6 cannot honour presenting itself as available |
+
+The second is declaration class in the §6.2.2 sense — it confirms a signature was *named*, not that one was given. Verifying the reference resolves needs the Readiness Report generator (item 13), and §5c.1 records that gap rather than letting it look closed.
+
+**`band` and `derived_from_client_data_only` have no writable field**, and `extra="forbid"` is what makes that true rather than aspirational. Pydantic's default would have dropped a written `band` silently, so a pack author writing `band: money` over a 0.91 hold rate would have seen no error and believed it took effect — refusing beats ignoring. The band cap does real work: an uncorroborated rule at 0.9963 comes out `ambiguous`, not `money`, which is §9.4's circularity guard executing rather than being described.
+
+### 5c.1 Open — the signature reference is named, not verified
+
+**Status: open. Owner: unassigned. Due: item 13, the Readiness Report generator.**
+
+`provenance.signature_ref` must be present before a discovered rule loads as confirmed or enforced, which closes promotion-by-text-editor. What it does **not** do is check that the reference names a real signed entry — any non-blank string satisfies it today. Until the Readiness Report exists there is nothing to resolve against, so the control is declaration class by necessity rather than by choice.
+
+Recorded here because the alternative was to leave §11 looking fully enforced. When item 13 lands, the check becomes verification class and this section closes.
+
+### 5c.2 Two structural tests had been passing for the wrong reason
+
+Both `test_a_member_cannot_be_declared_without_its_pii_flag` and its predicate counterpart asserted that a class fails to build when a member omits its declarations, and both wrote `__new__ = X.__new__`. **That is not the custom constructor.** Enum moves a class's own `__new__` to `__new_member__` during creation and substitutes its own value-lookup `__new__` — so the `TypeError` came from the lookup failing, and neither test said anything about the contract it was named after.
+
+Found by accident: a new sibling test asserting that no parameter may acquire a default raised `KeyError` instead of failing, because the signature it introspected had no `implementation` in it.
+
+This is the third session running in which the break round found the hole in a test rather than in the code, and it sharpens the standing lesson one more turn. **Breaking a control tells you a test fails. It does not tell you the test failed for the reason its name claims** — and a test that passes for the wrong reason is worse than an absent one, because it is counted.
 
 ---
 

@@ -1,6 +1,6 @@
 # BUILD PLAN — Harness v0.4.0 → Gate 1
 
-**Reflects:** `CLAUDE.md` v0.6.0 · last reviewed August 2026 · see `ROADMAP.md` and `STATUS.md`
+**Reflects:** `CLAUDE.md` v0.6.2 · last reviewed August 2026 · see `ROADMAP.md` and `STATUS.md`
 **Scope:** Gate 0 (synthetic) + Gate 1 (dealership, real data). Phase 1–3 items are out of scope by design.
 **Headline:** ~30 person-days over ~10 calendar weeks. Cash cost is negligible; the binding constraint is founder time.
 
@@ -30,9 +30,9 @@ Legend: **C** = Claude writes it (code, tests, schemas, docs) · **N** = Nazif's
 | 1 | Repo skeleton, Pydantic schemas (manifest, pack, rule, evidence), CI synthetic-fixture guard | C + N review | 1.5 | 1 | Approving the canonical schema shape — it is expensive to change later |
 | 2 | Evidence emitter, egress allowlist, Leg 1 leak test | C + N review | 1.0 | 1–2 | Deciding what may leave the boundary is a commercial and legal call, not a coding one |
 | 3a | **Canonical schema artifact + narrow resolver + semantic type binding chain** | C + **N decides the schemas** | 1.5 | 2 | ✅ Built. `canonical/` ships `energy/generation_v1` and `automotive/sales_v2` as first drafts — **the field lists and the semantic type assignments still need Nazif's review**, which is the part of this estimate that has not been spent |
-| 3b | Predicate registry (~15 predicates) + §7.2 rule schema | C + N decides list | 0.5 | 2 | Which predicates exist bounds what a rule can say |
+| 3b | Predicate registry (13 predicates) + §7.2 rule schema | C + N decides list | 0.5 | 2 | ✅ Built. **The predicate list and the pattern list still need Nazif's review** — which predicates exist bounds what a rule can say, and the patterns are the kernel's only executable content |
 | 4 | Bronze store — partitioning, immutability enforcement, pre-image lookup | C | 1.5 | 2–3 | Storage substrate decision (Postgres / DuckDB / object store) |
-| 5 | Preflight — framework, digest, CLI, and the checks today's capabilities allow | C + N reviews | 1.0 | 3 | ◐ **Framed: 16 of 30 checks live.** Revised down from 2.0 — severities are pinned to §6.2.2 and are *not* per-client, so the budgeted severity negotiation does not happen. What remains is reviewing the Preflight Report as a client-facing artifact |
+| 5 | Preflight — framework, digest, CLI, and the checks today's capabilities allow | C + N reviews | 1.0 | 3 | ◐ **Framed: 18 of 30 checks live.** Revised down from 2.0 — severities are pinned to §6.2.2 and are *not* per-client, so the budgeted severity negotiation does not happen. What remains is reviewing the Preflight Report as a client-facing artifact |
 | 6 | Arming — interactive + standing, client IdP interface (stubbed in Gate 0) | C + N decides IdP path | 1.0 | 3 | How the client's IdP will actually be reached |
 | 7 | Walking skeleton: `preflight → ingest → Bronze → profile → emit` (WAP) | C | 1.5 | 3 | — |
 | 8 | Replay / determinism assertion against fixed Bronze partition | C | 0.5 | 3 | — |
@@ -71,9 +71,9 @@ So the unimplemented checks are distributed. Each is named against the item that
 | Item | Preflight checks it must close | Why it is that item |
 |---|---|---|
 | **3a** ✅ | `schema.canonical_schema_resolves` (new), `schema.declared_key_present`, `volume.max_timestamp_within_freshness_window` | Closed. The freshness one was not obvious: "newest record inside the window" cannot run until something says *which* field carries time. `schema.types_match_semantic_types` turned out **not applicable** to a file binding rather than opened — a CSV declares no types, and shape-versus-type is discovery Layer A's check, not preflight's |
-| **3b** | `packs.predicates_exist_in_registry`, `packs.semantic_types_resolve` | Both resolve a rule's references against a closed registry; neither the registry nor the §7.2 rule shape exists. **Note these reach vacuous-pass, not closure**: with no pack loader there are no rules to inspect, so they pass on an empty pack list and go `unavailable` the moment item 9 declares one |
+| **3b** ✅ | `packs.predicates_exist_in_registry`, `packs.semantic_types_resolve` | Built, and **vacuous-pass rather than closed**, as predicted: with no pack loader there are no rules to inspect, so both pass on an empty pack list and go `unavailable` the moment item 9 declares one. The resolution logic underneath is real and tested directly with constructed rules — item 9 calls these functions, it does not write them |
 | **7** (walking skeleton) | `connectivity.target_writable`, `volume.no_truncated_extract`, `capacity.space_for_output_and_quarantine`, `capacity.egress_allowlist_pinned`, `capacity.kill_switch_reachable` | The skeleton brings the target adapter, `ingest`, and the §6.3 publication boundary the kill switch is defined against. Five checks arrive with one item because one item finally gives the pipeline an output end |
-| **9** (`tr-core`) | `encoding.locale_matches_observed_shapes`, `schema.no_undeclared_pii_column` | Both are locale knowledge. Writing either before `tr-core` exists would put Turkish shapes in the kernel and break P3 — the shape detectors currently in `kernel/gates/guard.py` are already a known instance of that defect |
+| **9** (`tr-core`) | `encoding.locale_matches_observed_shapes`, `schema.no_undeclared_pii_column`, plus **re-closing all three pack checks** and the Turkish entries in `PatternName` | Both are locale knowledge. Writing either before `tr-core` exists would put Turkish shapes in the kernel and break P3 — the shape detectors currently in `kernel/gates/guard.py` are already a known instance of that defect |
 | **17** (client access) | `connectivity.principal_is_read_only`, `connectivity.grants_match_declared_scope`, `connectivity.credential_expiry_exceeds_run`, `governance.subprocessor_register_current` | Three need a real bound credential to inspect; the fourth needs a maintained `SUBPROCESSORS.md` (§17). All four are access and legal work, which is what item 17 already is |
 | **19** (`client/tekbas`) | `packs.no_pass_through_above_client_layer`, and the vacuity below | The first engagement to declare an external reference is the first one where `license_mode` and layer placement can be checked at all (§9.6) |
 
