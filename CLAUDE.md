@@ -1,10 +1,11 @@
 # CLAUDE.md — MAXENG Data Onboarding Harness
 
 **Repo:** `data-onboarding-harness`
-**Version:** 0.6.1 (draft)
+**Version:** 0.6.2 (draft)
 **Status:** Pre-Gate 0
 **Owner:** MAXENG
 **Changelog:**
+0.6.2 — **§7.2 contradicted §7.5, and two confidence fields could contradict their own evidence.** The authored-rule example carried `expression: "regex_match(value, '…')"` while §7.5 says rule expressions are not a language and §0 forbids `eval`/`exec` — so the string could never have been evaluated by anything that respects this document. Corrected to `predicate` + `params`, with the accompanying note that **params carry names, not content**: `pattern: tr_msisdn` names a registered pattern rather than supplying a regex, because a pack-authored regex is executable content from outside the release and would end §7.5's central claim. The stale `tr_msisdn_canonical` transform name is fixed to the registry's `canonicalize_phone`. Separately, §7.3 showed `band` as an authored field and §9.4 implied the same of `derived_from_client_data_only`; both are now **computed with no writable field at all**, since a draft pack that can assert `money` over a 0.91 hold rate defeats the circularity mitigation the band belongs to — and "it is computed" is not a control while a write path remains. §11 gains the two lifecycle invariants the rule schema now enforces: `enforced` requires a predicate, and a discovered rule requires a named signature reference before it can load as confirmed or enforced.
 0.6.1 — **§0 gains a disclosure rule: docstrings are a published surface.** `schemas/json/*.json` is generated from class docstrings, and §14 ships those files to the client inside the OCI image — so a design rationale written in a docstring is disclosed to every engagement, while reading like an internal note to whoever wrote it. An audit of the generated schemas found eight such descriptions, all explaining *why we built it this way* rather than what the field is. Two more findings sit beside it and are recorded in `STATUS.md` rather than here: the schemas for rules and packs published a shape this spec does not recognise with nothing saying so, and it is still undecided whether **this document** belongs in the image at all — §5 puts `CLAUDE.md` at the repository root, and a naive image build would ship §1's economics, §2.1's legal posture and §16's open counsel questions to the client they concern.
 0.6.0 — **The canonical schema becomes a first-class artifact (§7.6).** §7.1 has carried `canonical_schema: automotive/sales_v2` since the beginning and §6 has always said `map` resolves the column map "→ canonical schema", but nothing said what a canonical schema *is*, where it lives, or who resolves it. Preflight found the gap by running into it three times: `types_match_semantic_types`, `declared_key_present` and `max_timestamp_within_freshness_window` all stop at the same missing link, because `column_map` maps a source name to a canonical *field name* and nothing said what a canonical field is. So §7.5's "rules bind to semantic types" had no chain to travel and §13's `reuse_ratio` had nothing to measure. Versioned as a minor rather than a patch for the same reason 0.5.0 was: it introduces an artifact class with its own directory, its own resolver and its own lifecycle, and it changes what must accompany a manifest for a run to be possible at all. Three things ride along: §6.2.2 gains **`the declared canonical schema resolves`**, because a check registry that is a superset of this table loses the invariant that no check exists outside it; §7.5 records that semantic types are **kernel-owned including sector-specific ones**, which §8 requires rather than merely prefers; and each type now **declares whether it is PII-typed as part of being a member**, closing a hole where a new type defaulted to non-PII in silence and became eligible for §8.1 export.
 0.5.4 — **Two kinds of check, and a report that says which is which.** §6.2.2 lists "DPA reference recorded" beside "declared encoding actually decodes the source" as though they were the same act. They are not: one measures an observable fact, the other confirms that somebody made a written commitment, and only the first is evidence of anything being *true*. Both belong in preflight — a missing DPA reference must stop a run — but a client reading `restore point: passed` must not conclude that a restore was tested. §6.2.2 now splits every check into a **verification class** and a **declaration class**, requires the Preflight Report to show the class per row, and names the three checks that are declaration class today. The distinction is not cosmetic: it is the difference between a report that documents what was measured and one that launders a promise into a finding.
@@ -470,14 +471,22 @@ egress:
   severity: error
   applies_to:
     semantic_type: phone_mobile
-  expression: "regex_match(value, '^(90)?5\\d{9}$')"
+  predicate: matches_pattern           # §7.5 registry name, never an expression
+  params:
+    pattern: tr_msisdn                 # a registered pattern name, never a regex
   repair:
-    transform: tr_msisdn_canonical
+    transform: canonicalize_phone      # registry member; locale is the pack's
     reversible: true
   provenance:
     source: authored
     author: maxeng
 ```
+
+An earlier version of this example carried `expression: "regex_match(value, '…')"`, which contradicted §7.5 in the same document: rule expressions are not a language, and §0 forbids `eval`/`exec`, so that string could never have been evaluated by anything. A rule names a predicate and supplies parameters — both resolved against closed, kernel-owned registries.
+
+**`params` values are names, not content.** `pattern: tr_msisdn` names a registered pattern; it is not a regex the pack supplies. That distinction is what keeps §7.5's "cannot execute anything that was not shipped in the release" true — a pack-authored regex is executable content from outside the release, and a catastrophic-backtracking one is an availability incident in a client's environment. Adding a pattern is a kernel change with a test, the same friction adding a predicate carries.
+
+The `transform` name was also stale: there is no `tr_msisdn_canonical`. The registry holds `canonicalize_phone`, whose locale is a parameter a pack supplies (§7.5).
 
 ### 7.3 Rule (discovered — draft pack output)
 
@@ -493,11 +502,16 @@ egress:
     hold_rate: 0.9963
     violating_rows: 412
     total_rows: 111204
-    band: money
     discovered_by: b_dependency.hyfd
     corroborated_by: cardata.brand_catalog
   downstream_impact: high           # affects sales attribution and Cardata join
 ```
+
+**`band` and `derived_from_client_data_only` are computed, and the schema has no field to write them into.** Both are functions of evidence already present: the band comes from `hold_rate` via §9.2, capped at `ambiguous` when `corroborated_by` is empty (§9.4/2), and `derived_from_client_data_only` is simply whether that list is empty (§9.4/3).
+
+Writable versions could disagree with the evidence beside them — a rule with a hold rate of 0.91 could be presented as `money`, and nothing in the pipeline would notice. Since §9.4 exists precisely because rules learned from dirty data encode the dirt, a confidence label a draft pack can assert independently of its evidence defeats the mitigation it belongs to. Saying "it is computed" is not enough: **if a write path exists it will eventually be used**, so there is no field.
+
+The same applies to any future derived field. A number the report presents as evidence of confidence must be derivable from the evidence, or it is not evidence.
 
 ### 7.4 Pack resolution and precedence
 
@@ -695,7 +709,8 @@ proposed ──(client signature)──> confirmed ──(activation)──> enf
 ```
 
 - `proposed` rules run in **shadow mode**: evaluated, counted, logged; never quarantine.
-- Transition to `confirmed` requires a signed Data Readiness Report entry. It cannot be set by a config edit, an LLM, or an engineer.
+- Transition to `confirmed` requires a signed Data Readiness Report entry. It cannot be set by a config edit, an LLM, or an engineer. **A discovered rule therefore carries a `provenance.signature_ref` before it may load in `confirmed` or `enforced` state**, and the rule schema refuses one that does not — which stops promotion-by-text-editor without waiting for the Readiness Report to exist. That check is declaration class in the §6.2.2 sense: it confirms a signature was named, not that one was given. Verifying the reference resolves needs the report generator, and until it exists the gap is recorded rather than assumed closed.
+- **A rule that quarantines must have something to evaluate.** `state: enforced` requires a predicate, because P7 makes enforced rules quarantine on violation and a rule with nothing to test cannot. A `proposed` discovered rule may have none — it is still a hypothesis (P4).
 - `enforced` rules quarantine on violation.
 - Deprecation never deletes; the rule stays with a `superseded_by` pointer so historical evidence artifacts remain interpretable.
 
