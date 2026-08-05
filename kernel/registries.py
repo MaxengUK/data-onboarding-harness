@@ -15,53 +15,85 @@ strings. There is no `tr_msisdn_canonical` transform — there is
 """
 
 from enum import Enum
+from typing import Self
 
 
+# **Every member declares whether it is PII-typed, as part of being a member.**
+#
+# The declaration used to be a `frozenset` beside the enum, which meant a type
+# added without being added to the set defaulted to non-PII — silently, and
+# non-PII types are eligible for §8.1 distinct-value export. The failure was a
+# forgotten line making a column's values exportable, with nothing to notice it.
+#
+# Declaring it in the member makes the omission impossible rather than
+# reviewable: `__new__` takes the flag positionally, so `FOO = "foo"` raises a
+# TypeError at class creation and the import fails. There is no state in which a
+# member exists without a classification.
+#
+# The `str` value is unaffected — `SemanticType.TCKN == "tckn"` and
+# `.value == "tckn"` both hold — so Pydantic validation, JSON Schema generation
+# and the egress gate's isinstance membership check behave exactly as before.
+#
+# A type is PII-typed if it identifies a natural person either on its own or in
+# combination with data the recipient can reasonably obtain. Chassis and plate
+# are PII-typed deliberately: both resolve to an owner through registries a
+# recipient can reach, so treating them as vehicle attributes would be wrong.
+#
+# Kept out of the class docstring on purpose: `schemas/export_json_schema.py`
+# publishes that docstring as the type's `description` in every generated JSON
+# Schema, and a rationale about `__new__` is not something a schema consumer has
+# any use for.
 class SemanticType(str, Enum):
-    """What a column *means*, independent of what the client called it."""
+    """What a column means, independent of what the client called it.
 
-    # --- PII-typed ---
-    TCKN = "tckn"
-    VKN = "vkn"
-    PHONE_MOBILE = "phone_mobile"
-    EMAIL = "email"
-    PERSON_NAME = "person_name"
-    ADDRESS = "address"
-    VEHICLE_PLATE = "vehicle_plate"
-    CHASSIS_NO = "chassis_no"
+    Each member declares whether it is PII-typed (§7.5, §8).
+    """
 
-    # --- not PII-typed ---
-    BRAND = "brand"
-    MODEL = "model"
-    CATEGORY = "category"
-    PROVINCE_CODE = "province_code"
-    DATE = "date"
-    CURRENCY_AMOUNT = "currency_amount"
-    COUNT = "count"
-    OPAQUE_KEY = "opaque_key"
+    def __new__(cls, value: str, is_pii: bool) -> Self:
+        member = str.__new__(cls, value)
+        member._value_ = value
+        member.is_pii = is_pii
+        return member
 
+    is_pii: bool
 
-#: Drives the §8 egress rules and the §6.2.2 undeclared-column check.
-#: A type is PII-typed if it identifies a natural person either on its own or
-#: in combination with data the recipient can reasonably obtain. Chassis and
-#: plate are here deliberately: both resolve to an owner through registries a
-#: recipient can reach, so treating them as vehicle attributes would be wrong.
-PII_SEMANTIC_TYPES: frozenset[SemanticType] = frozenset(
-    {
-        SemanticType.TCKN,
-        SemanticType.VKN,
-        SemanticType.PHONE_MOBILE,
-        SemanticType.EMAIL,
-        SemanticType.PERSON_NAME,
-        SemanticType.ADDRESS,
-        SemanticType.VEHICLE_PLATE,
-        SemanticType.CHASSIS_NO,
-    }
-)
+    TCKN = ("tckn", True)
+    VKN = ("vkn", True)
+    PHONE_MOBILE = ("phone_mobile", True)
+    EMAIL = ("email", True)
+    PERSON_NAME = ("person_name", True)
+    ADDRESS = ("address", True)
+    VEHICLE_PLATE = ("vehicle_plate", True)
+    CHASSIS_NO = ("chassis_no", True)
+
+    BRAND = ("brand", False)
+    MODEL = ("model", False)
+    CATEGORY = ("category", False)
+    PROVINCE_CODE = ("province_code", False)
+    DATE = ("date", False)
+    CURRENCY_AMOUNT = ("currency_amount", False)
+    COUNT = ("count", False)
+    OPAQUE_KEY = ("opaque_key", False)
+    #: Energy sector (§9.5 `prior` mode). A metered quantity in MWh — not a
+    #: currency amount, which is what it would otherwise be forced into, and the
+    #: distinction matters because the rules that apply to it come from physics
+    #: (generation ≥ 0, efficiency ≤ theoretical ceiling) rather than from money.
+    #:
+    #: A sector type in the kernel registry is not a P3 violation: §8 permits
+    #: semantic type labels to cross the boundary *because* MAXENG owns the word
+    #: list and ships it in the release, so a pack that could add one at runtime
+    #: would put an externally-authored string into a permitted egress class.
+    #: The type is kernel-owned; its shape and its rules belong to a pack.
+    ENERGY_QUANTITY = ("energy_quantity", False)
 
 
 def is_pii(semantic_type: SemanticType) -> bool:
-    return semantic_type in PII_SEMANTIC_TYPES
+    """Kept as a function because `kernel.gates.egress_gate` reads it that way.
+
+    Delegates to the member's own flag; there is no second source of truth to
+    drift from.
+    """
+    return semantic_type.is_pii
 
 
 class TransformName(str, Enum):

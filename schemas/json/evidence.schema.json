@@ -262,7 +262,7 @@
       "type": "string"
     },
     "SemanticType": {
-      "description": "What a column *means*, independent of what the client called it.",
+      "description": "What a column means, independent of what the client called it.\n\nEach member declares whether it is PII-typed (\u00a77.5, \u00a78).",
       "enum": [
         "tckn",
         "vkn",
@@ -279,7 +279,8 @@
         "date",
         "currency_amount",
         "count",
-        "opaque_key"
+        "opaque_key",
+        "energy_quantity"
       ],
       "title": "SemanticType",
       "type": "string"
