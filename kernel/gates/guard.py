@@ -72,6 +72,24 @@ ISO_TIMESTAMP_PATTERN = re.compile(
     r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?'
 )
 
+#: What a blanked timestamp is replaced with, one character per character so
+#: offsets are preserved.
+#:
+#: **Not a space, and the difference is a fabricated violation.** The plate
+#: pattern joins its parts with `[ \t\-]*`, so filling with spaces welds
+#: whatever sat either side of the timestamp into one candidate:
+#: `ilce=34 <timestamp> ABC 123` becomes a province code, a run of spaces and a
+#: letter-digit group — a plate the original line does not contain. The guard
+#: would then report a leak that is not there, in a file nobody can fix, which
+#: is the same "control that cries wolf" failure the blanking exists to prevent.
+#:
+#: A delimiter would hide it in CSV and TSV, where a comma or semicolon breaks
+#: the run. It bites in `.log`, `.txt` and `.md`, which the guard also scans.
+#:
+#: `~` cannot appear in `[ \t\-]`, `[A-Z]` or `\d`, so no fill region can be
+#: crossed by the pattern and no match can be created through one.
+TIMESTAMP_FILL = "~"
+
 
 def is_authentic_tckn(tckn: str) -> bool:
     """Geçerli bir TCKN algoritmasına uyup uymadığını kontrol eder."""
@@ -232,7 +250,7 @@ def scan_file_for_leaks(file_path: Path) -> list[str]:
         # Same length, so any offset the pattern reports still points at the
         # right column of the original line.
         without_timestamps = ISO_TIMESTAMP_PATTERN.sub(
-            lambda match: " " * len(match.group()), line
+            lambda match: TIMESTAMP_FILL * len(match.group()), line
         )
         for match in PLATE_PATTERN.finditer(without_timestamps):
             violations.append(f"Authentic Turkish Plate detected: {match.group()}")
