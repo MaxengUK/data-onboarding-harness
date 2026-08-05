@@ -341,4 +341,20 @@ The `LICENSE` added at the repo root is proprietary and closes §3.3. It does no
 
 **Scope note — wrapped libraries widen this.** §14 wraps Great Expectations, Soda Core, Splink, Presidio, and Deequ-style constraint suggestion. These are not yet in `pyproject.toml`; they arrive with the discovery and validation items. Whoever builds the inventory should expect the licence surface to be materially larger than today's five runtime dependencies suggest, and should check for copyleft among the transitive set at the same time — an LGPL or AGPL component inside a distributed image raises a different question than an attribution one, and it is cheaper to find it before it is load-bearing.
 
+### 8.1 Open — decide what the image is allowed to contain
+
+**Status: open. Owner: unassigned. Due: before the first image build, same trigger as §8.**
+
+Auditing the generated JSON Schemas surfaced a larger question than the one being audited. Those files ship to the client (§14: an OCI image plus a mounted pack directory), which makes every class docstring a published surface — that part is closed, and `CLAUDE.md` §0 now carries the rule. What is not closed is **what else a naive image build would carry with it**.
+
+`CLAUDE.md` sits at the repository root by §5's own layout. A `COPY . .` would put in front of the client: §1's economic argument for the product they are buying, §2.1's legal posture including where MAXENG believes its exposure lies, §13's target metrics for their engagement, and §16's open questions for counsel — one of which says in terms *"do not let either answer appear in marketing copy first"*.
+
+None of that is a leak of client data, so no gate in the design catches it. It is a disclosure of MAXENG's own reasoning to the party it reasons about, and the only thing standing between it and a client is a decision nobody has made yet.
+
+Three things to settle together, because they have one trigger:
+
+1. **An explicit image manifest, not an exclusion list.** State what goes in — `kernel/`, `schemas/json/`, `canonical/`, the entry point — rather than what stays out. An exclusion list fails open every time a file is added.
+2. **Where the specification lives at runtime.** The kernel references §-numbers in error messages and docstrings, and those are dangling pointers for a client with no copy. Either ship a client-facing subset, or drop the references from anything a client reads.
+3. **The same question for `docs/`.** This file records estimates, defects and internal judgment. `BUILD-PLAN.md` prices founder days.
+
 **Closed, same area, smaller:** `pyproject.toml` now declares `license = { file = "LICENSE" }` and carries the `Private :: Do Not Upload` classifier. The classifier is deliberately not a real one — PyPI rejects unknown classifiers, so an accidental `twine upload` fails rather than publishing a proprietary repo that carries `tr-core`. A future contributor "fixing" it to a valid classifier would remove the control, so the reason is in a comment beside it.
