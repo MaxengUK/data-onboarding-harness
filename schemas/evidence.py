@@ -59,12 +59,11 @@ class ColumnProfile(EgressModel):
     distinct_values: KAnonymisedValues | None = None
 
 
+# A list of these rather than a mapping: an open dict would put free-text keys
+# into the artifact, and the gate refuses mappings for exactly that reason. The
+# recipient needs the metric, not the shape argument behind it.
 class BandCount(EgressModel):
-    """One entry of the §13 `band_distribution` metric.
-
-    A list of these rather than a mapping: an open dict would put free-text keys
-    into the artifact, and the gate refuses mappings for exactly that reason.
-    """
+    """One entry of the `band_distribution` metric: a band and its count."""
 
     band: Annotated[ConfidenceBand, Egress(EgressKind.CONFIDENCE_BAND)]
     count: Annotated[int, Egress(EgressKind.COUNT)]

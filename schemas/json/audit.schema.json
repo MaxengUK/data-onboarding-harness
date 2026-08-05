@@ -2,7 +2,7 @@
   "description": "One attributable mutation, per P8: one rule id, one transform name.\n\nHolds the pre-image hash so a value can be verified against the Bronze\npartition that still holds it (\u00a74.2). The hash proves which value it was;\nBronze produces it.",
   "properties": {
     "row_ordinal": {
-      "description": "Position of the source row in its Bronze partition. Segment assignment is a pure function of this (\u00a74.2.6), which is what keeps segment boundaries independent of worker completion order.",
+      "description": "Position of the source row in its Bronze partition.",
       "minimum": 0,
       "title": "Row Ordinal",
       "type": "integer"

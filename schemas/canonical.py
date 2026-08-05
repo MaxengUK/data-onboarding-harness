@@ -22,14 +22,13 @@ from pydantic import BaseModel, Field, model_validator
 from kernel.registries import SemanticType
 
 
+# No physical type, deliberately. `emit` will need one to create a target table,
+# and until a target adapter exists there is nothing to consume it — a field with
+# no reader is a field that drifts out of step with reality while looking
+# authoritative. That is a build-sequencing decision and belongs here rather than
+# in the schema a client receives.
 class CanonicalField(BaseModel):
-    """One field of the canonical schema.
-
-    No physical type, deliberately. `emit` will need one to create a target
-    table, and until a target adapter exists there is nothing to consume it — a
-    field with no reader is a field that drifts out of step with reality while
-    looking authoritative.
-    """
+    """One field of the canonical schema."""
 
     model_config = {"frozen": True}
 
@@ -51,32 +50,35 @@ class CanonicalSchema(BaseModel):
 
     model_config = {"frozen": True}
 
+    # Why the version lives in the id rather than in a field of its own: v2 is a
+    # different schema, not a new version of this one, so evolution has to be a
+    # new artifact and a deliberate re-map rather than an in-place edit that
+    # silently changes what a client's existing output means. The consequence a
+    # client needs — one id, one shape, forever — is in the description.
     id: str = Field(
         min_length=1,
         description=(
-            "Matches manifest.canonical_schema exactly, e.g. 'energy/generation_v1'. "
-            "The version is part of the id rather than a field of its own: v2 is a "
-            "different schema, not a new version of this one, so evolution is a new "
-            "artifact and a deliberate re-map rather than an in-place edit that "
-            "silently changes what a client's existing output means."
-        )
-    )
-    fields: tuple[CanonicalField, ...] = Field(min_length=1)
-    key: tuple[str, ...] = Field(
-        min_length=1,
-        description=(
-            "The declared key or unique column combination (§6.2.2). `resolve` "
-            "needs one before it can cluster at all, and preflight blocks "
-            "without it rather than letting discovery recover it silently."
+            "Matches manifest.canonical_schema exactly, e.g. "
+            "'energy/generation_v1'. An id names one fixed shape: a changed "
+            "schema is a new id, never an edit to this one."
         ),
     )
+    fields: tuple[CanonicalField, ...] = Field(min_length=1)
+    # Preflight blocks when the key is not mapped rather than letting discovery
+    # recover it later; `resolve` needs one before it can cluster at all. That
+    # is stage behaviour, not schema semantics.
+    key: tuple[str, ...] = Field(
+        min_length=1,
+        description="The field or combination of fields that identifies a record.",
+    )
+    # Declared rather than inferred from "the only date-typed field": sales_v2
+    # carries order_date beside delivery_date, so a second date field is the
+    # normal case and inference would silently pick a side.
     freshness_field: str = Field(
         min_length=1,
         description=(
-            "Which field the §6.2.2 freshness window is measured against. "
-            "Declared rather than inferred from 'the only date-typed field': "
-            "sales_v2 carries order_date beside delivery_date, so a second one "
-            "is the normal case and inference would silently pick a side."
+            "Which field the freshness window is measured against. Must name a "
+            "field this schema declares."
         ),
     )
 

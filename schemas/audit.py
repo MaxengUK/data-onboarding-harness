@@ -58,13 +58,12 @@ class AuditRecord(BaseModel):
     #: the record exportable, which is the failure this module exists to prevent.
     IN_BOUNDARY_ONLY: ClassVar[bool] = True
 
+    # Segment assignment is a pure function of this (§4.2.6), which is what
+    # keeps segment boundaries independent of worker completion order. That is
+    # why the field exists; what it *is* is in the description.
     row_ordinal: int = Field(
         ge=0,
-        description=(
-            "Position of the source row in its Bronze partition. Segment "
-            "assignment is a pure function of this (§4.2.6), which is what keeps "
-            "segment boundaries independent of worker completion order."
-        ),
+        description="Position of the source row in its Bronze partition.",
     )
     record_key: str
     column_name: str

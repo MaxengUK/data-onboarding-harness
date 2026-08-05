@@ -26,7 +26,7 @@
       "type": "object"
     },
     "AuditConfig": {
-      "description": "The audit store's location and retention (\u00a74.2.6).\n\nA separate store *beside* Bronze, never inside it. `AuditRecord`s are\nproduced by `normalize`, i.e. after `ingest`, so writing them into a Bronze\npartition would be a post-`ingest` write to Bronze (P10) and would leave that\npartition without a stable content hash, collapsing \u00a74.2.5 layer 3.\n\nThere is no `format` key here, unlike `BronzeConfig`. The absence is\ndeliberate: \u00a74.2.1 pins Bronze's substrate because \u00a74.2.1's three arguments\nare about Bronze, and the audit store's format is an internal kernel matter\nthat no manifest has a reason to name. A key that cannot vary is worth\nexposing only where a reader would otherwise expect variance, and \u00a77.1 never\ninvited it here.",
+      "description": "Where the audit store lives and how long it is kept.\n\nA separate store beside Bronze, never inside it: audit records are produced\nafter ingest, so writing them into a Bronze partition would leave that\npartition without a stable content hash.",
       "properties": {
         "location": {
           "description": "A path abstraction, resolved the same way as bronze.location (\u00a74.2.2). Parallel to Bronze, never a path inside it.",
@@ -50,7 +50,7 @@
     "BronzeConfig": {
       "properties": {
         "location": {
-          "description": "A path abstraction, not a local path (\u00a74.2.2). Resolved by kernel.storage.resolve_location; local FS, S3 and Azure Blob are equally valid, though only local is implemented in this build.",
+          "description": "A location, not necessarily a local path: local filesystem, S3 and Azure Blob are equally valid, though only local paths are implemented in this build.",
           "title": "Location",
           "type": "string"
         },
@@ -96,7 +96,7 @@
       "type": "object"
     },
     "GovernanceConfig": {
-      "description": "Declarations \u00a76.2.2 requires be *present*, not proven (\u00a76.2.2, 0.5.4).\n\nBoth fields below back **declaration-class** checks: preflight verifies that\na commitment was made and does not test whether it holds. That is not a\nweakness to be fixed later by validating the strings \u2014 a DPA reference is a\npointer into contract work that lives outside this repository, and a restore\npoint cannot be exercised by a tool holding no standing access (P9). What\nthe check buys is that the commitment cannot be *absent* and unnoticed.",
+      "description": "Commitments preflight requires to be present, not proven.\n\nBoth fields back declaration-class checks: preflight confirms the\ndeclaration exists and does not verify that it holds.",
       "properties": {
         "dpa_ref": {
           "description": "Reference to the executed DPA/KV\u0130S for this engagement \u2014 a contract id or document reference, never the document itself (\u00a72.1 L1).",
@@ -149,7 +149,7 @@
       "type": "object"
     },
     "RowCountBounds": {
-      "description": "Declared row count envelope for the bound source (\u00a76.2.2).\n\nTyped rather than left as `dict[str, int]`, which accepted `{}` and\n`{\"foo\": 5}` and made the volume check a comparison against nothing. A\nblocker that silently has no bounds to compare against is the failure mode\nthis repo keeps finding, so the bounds are a model with a validator.",
+      "description": "The row count a run expects the bound source to fall within.\n\nPreflight warns when the observed count falls outside it.",
       "properties": {
         "min": {
           "minimum": 0,

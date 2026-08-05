@@ -1,7 +1,7 @@
 {
   "$defs": {
     "BandCount": {
-      "description": "One entry of the \u00a713 `band_distribution` metric.\n\nA list of these rather than a mapping: an open dict would put free-text keys\ninto the artifact, and the gate refuses mappings for exactly that reason.",
+      "description": "One entry of the `band_distribution` metric: a band and its count.",
       "properties": {
         "band": {
           "$ref": "#/$defs/ConfidenceBand"
@@ -93,7 +93,7 @@
       "type": "string"
     },
     "KAnonymisedValues": {
-      "description": "A distinct-value list under the \u00a78.1 exception.\n\nAll three conditions must hold; the gate raises if any does not. It does not\nquietly fall back to shapes \u2014 producing the compliant alternative is the\nprofiling stage's job, and a gate that silently substitutes output is a gate\nnobody can reason about.",
+      "description": "A distinct-value list, exported only when every \u00a78.1 condition holds.\n\nA non-PII semantic type, cardinality within the limit, and every group count\nat or above the run's k-anonymity minimum.",
       "properties": {
         "semantic_type": {
           "$ref": "#/$defs/SemanticType"

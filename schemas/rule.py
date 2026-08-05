@@ -27,6 +27,13 @@ from pydantic import BaseModel, Field
 
 
 class RuleDefinition(BaseModel):
+    """**Provisional. Not the rule schema this version of the Harness executes.**
+
+    Published so the artifact set is complete, not because anything reads it.
+    The executable rule shape lands with the predicate registry; until then no
+    pack should be authored against these fields.
+    """
+
     id: str
     name: str
     description: str

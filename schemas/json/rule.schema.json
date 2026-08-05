@@ -1,4 +1,5 @@
 {
+  "description": "**Provisional. Not the rule schema this version of the Harness executes.**\n\nPublished so the artifact set is complete, not because anything reads it.\nThe executable rule shape lands with the predicate registry; until then no\npack should be authored against these fields.",
   "properties": {
     "id": {
       "title": "Id",

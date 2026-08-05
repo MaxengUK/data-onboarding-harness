@@ -26,6 +26,13 @@ class PackRuleRef(BaseModel):
     severity: str = "error"
 
 class PackManifest(BaseModel):
+    """**Provisional. Not the pack schema this version of the Harness loads.**
+
+    Published so the artifact set is complete, not because anything reads it.
+    Layer, precedence and override declarations are absent, so a pack authored
+    against these fields cannot be resolved by a later version.
+    """
+
     name: str
     version: str
     sector: str | None = None

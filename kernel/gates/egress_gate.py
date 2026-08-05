@@ -142,13 +142,15 @@ class ValueCount(EgressModel):
     count: Annotated[int, Egress(EgressKind.COUNT)]
 
 
+# The gate does not quietly fall back to shapes when a condition fails —
+# producing the compliant alternative is the profiling stage's job, and a gate
+# that silently substitutes output is one nobody can reason about. Internal: the
+# recipient sees either this structure or nothing, and does not need the reason.
 class KAnonymisedValues(EgressModel):
-    """A distinct-value list under the §8.1 exception.
+    """A distinct-value list, exported only when every §8.1 condition holds.
 
-    All three conditions must hold; the gate raises if any does not. It does not
-    quietly fall back to shapes — producing the compliant alternative is the
-    profiling stage's job, and a gate that silently substitutes output is a gate
-    nobody can reason about.
+    A non-PII semantic type, cardinality within the limit, and every group count
+    at or above the run's k-anonymity minimum.
     """
 
     semantic_type: Annotated[SemanticType, Egress(EgressKind.SEMANTIC_TYPE)]

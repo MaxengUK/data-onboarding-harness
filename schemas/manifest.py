@@ -21,11 +21,15 @@ class SourceConfig(BaseModel):
 
 
 class BronzeConfig(BaseModel):
+    # `kernel.storage.resolve_location` is the resolver, named here rather than
+    # in the description: a client authoring a manifest has no use for a kernel
+    # import path, and a published schema that names one invites code written
+    # against it.
     location: str = Field(
         description=(
-            "A path abstraction, not a local path (§4.2.2). Resolved by "
-            "kernel.storage.resolve_location; local FS, S3 and Azure Blob are "
-            "equally valid, though only local is implemented in this build."
+            "A location, not necessarily a local path: local filesystem, S3 and "
+            "Azure Blob are equally valid, though only local paths are "
+            "implemented in this build."
         )
     )
     #: Pinned, not a toggle (§4.2.1). The key exists so a future second substrate
@@ -46,20 +50,21 @@ class BronzeConfig(BaseModel):
     retention_days: int = Field(..., gt=0, description="Mandatory — preflight fails if unset")
 
 
+# Why there is no `format` key here while `BronzeConfig` has one: §4.2.1 pins
+# Bronze's substrate because its three arguments are about Bronze, and the audit
+# store's format is an internal kernel matter no manifest has a reason to name.
+# A key that cannot vary is worth exposing only where a reader would otherwise
+# expect variance, and §7.1 never invited it here.
+#
+# Kept out of the docstring because `schemas/json/manifest.schema.json` is
+# generated from it and ships to clients in the OCI image (§14): the absence of a
+# key a client never expected is not something they need explained.
 class AuditConfig(BaseModel):
-    """The audit store's location and retention (§4.2.6).
+    """Where the audit store lives and how long it is kept.
 
-    A separate store *beside* Bronze, never inside it. `AuditRecord`s are
-    produced by `normalize`, i.e. after `ingest`, so writing them into a Bronze
-    partition would be a post-`ingest` write to Bronze (P10) and would leave that
-    partition without a stable content hash, collapsing §4.2.5 layer 3.
-
-    There is no `format` key here, unlike `BronzeConfig`. The absence is
-    deliberate: §4.2.1 pins Bronze's substrate because §4.2.1's three arguments
-    are about Bronze, and the audit store's format is an internal kernel matter
-    that no manifest has a reason to name. A key that cannot vary is worth
-    exposing only where a reader would otherwise expect variance, and §7.1 never
-    invited it here.
+    A separate store beside Bronze, never inside it: audit records are produced
+    after ingest, so writing them into a Bronze partition would leave that
+    partition without a stable content hash.
     """
 
     location: str = Field(
@@ -88,13 +93,15 @@ class TargetConfig(BaseModel):
     retention_days: int = Field(90, gt=0)
 
 
+# Typed rather than left as `dict[str, int]`, which accepted `{}` and
+# `{"foo": 5}` and made the volume check a comparison against nothing. A blocker
+# that silently has no bounds to compare against is the failure mode this repo
+# keeps finding. That history is ours, not the client's — the published schema
+# says what the field is, this comment says why it stopped being a dict.
 class RowCountBounds(BaseModel):
-    """Declared row count envelope for the bound source (§6.2.2).
+    """The row count a run expects the bound source to fall within.
 
-    Typed rather than left as `dict[str, int]`, which accepted `{}` and
-    `{"foo": 5}` and made the volume check a comparison against nothing. A
-    blocker that silently has no bounds to compare against is the failure mode
-    this repo keeps finding, so the bounds are a model with a validator.
+    Preflight warns when the observed count falls outside it.
     """
 
     min: int = Field(ge=0)
@@ -111,15 +118,17 @@ class RowCountBounds(BaseModel):
         return self
 
 
+# The defensive half of this rationale is ours: "not a weakness to be fixed
+# later by validating the strings". A DPA reference points into contract work
+# outside this repository, and a restore point cannot be exercised by a tool
+# holding no standing access (P9). The *client-relevant* half — that preflight
+# checks presence and not truth — stays published, because a client reading
+# "restore point: passed" needs to know what was and was not tested.
 class GovernanceConfig(BaseModel):
-    """Declarations §6.2.2 requires be *present*, not proven (§6.2.2, 0.5.4).
+    """Commitments preflight requires to be present, not proven.
 
-    Both fields below back **declaration-class** checks: preflight verifies that
-    a commitment was made and does not test whether it holds. That is not a
-    weakness to be fixed later by validating the strings — a DPA reference is a
-    pointer into contract work that lives outside this repository, and a restore
-    point cannot be exercised by a tool holding no standing access (P9). What
-    the check buys is that the commitment cannot be *absent* and unnoticed.
+    Both fields back declaration-class checks: preflight confirms the
+    declaration exists and does not verify that it holds.
     """
 
     dpa_ref: str = Field(
