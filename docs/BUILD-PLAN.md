@@ -1,6 +1,6 @@
 # BUILD PLAN — Harness v0.4.0 → Gate 1
 
-**Reflects:** `CLAUDE.md` v0.4.0 · last reviewed August 2026 · see `ROADMAP.md`
+**Reflects:** `CLAUDE.md` v0.5.4 · last reviewed August 2026 · see `ROADMAP.md` and `STATUS.md`
 **Scope:** Gate 0 (synthetic) + Gate 1 (dealership, real data). Phase 1–3 items are out of scope by design.
 **Headline:** ~30 person-days over ~10 calendar weeks. Cash cost is negligible; the binding constraint is founder time.
 
@@ -29,9 +29,10 @@ Legend: **C** = Claude writes it (code, tests, schemas, docs) · **N** = Nazif's
 |---|---|---|---|---|---|
 | 1 | Repo skeleton, Pydantic schemas (manifest, pack, rule, evidence), CI synthetic-fixture guard | C + N review | 1.5 | 1 | Approving the canonical schema shape — it is expensive to change later |
 | 2 | Evidence emitter, egress allowlist, Leg 1 leak test | C + N review | 1.0 | 1–2 | Deciding what may leave the boundary is a commercial and legal call, not a coding one |
-| 3 | Predicate registry (~15 predicates) + semantic type registry | C + N decides list | 1.0 | 2 | The semantic type list is the reuse mechanism; it must reflect real client data shapes |
+| 3a | **Canonical schema artifact + narrow resolver + semantic type binding chain** | C + **N decides the schemas** | 1.5 | 2 | The canonical schema *is* the contract every engagement maps onto, and the semantic type list is the reuse mechanism; both must reflect real client data shapes |
+| 3b | Predicate registry (~15 predicates) + §7.2 rule schema | C + N decides list | 0.5 | 2 | Which predicates exist bounds what a rule can say |
 | 4 | Bronze store — partitioning, immutability enforcement, pre-image lookup | C | 1.5 | 2–3 | Storage substrate decision (Postgres / DuckDB / object store) |
-| 5 | Preflight — all seven check categories | C + N defines severities | 2.0 | 3 | What counts as a blocker vs. warning is a client-relationship judgment |
+| 5 | Preflight — framework, digest, CLI, and the checks today's capabilities allow | C + N reviews | 1.0 | 3 | ◐ **Framed: 12 of 29 checks live.** Revised down from 2.0 — severities are pinned to §6.2.2 and are *not* per-client, so the budgeted severity negotiation does not happen. What remains is reviewing the Preflight Report as a client-facing artifact |
 | 6 | Arming — interactive + standing, client IdP interface (stubbed in Gate 0) | C + N decides IdP path | 1.0 | 3 | How the client's IdP will actually be reached |
 | 7 | Walking skeleton: `preflight → ingest → Bronze → profile → emit` (WAP) | C | 1.5 | 3 | — |
 | 8 | Replay / determinism assertion against fixed Bronze partition | C | 0.5 | 3 | — |
@@ -52,6 +53,35 @@ Legend: **C** = Claude writes it (code, tests, schemas, docs) · **N** = Nazif's
 | 22 | Remediation, metrics capture, Gate 1 close | C + N | 2.5 | 10 | — |
 | | **Gate 1 subtotal** | | **10.0** | **7–10** | |
 | | **Total** | | **30.0** | | |
+
+Item 3's re-pricing and item 5's cancel out, so the totals are unchanged. That is a real result rather than a rounding: the day did not vanish, it moved from a severity negotiation that turned out not to exist into a canonical schema artifact nobody had costed.
+
+**Caveat on what this column measures.** These are *Nazif days* — judgment and access, not implementation. §2.1 attaches preflight checks to later items, and most of that work is Claude-time, which this table has never tracked. Read the additions below as scope, not as budget.
+
+---
+
+## 2.1 Preflight checks are a tax on capability items, not an item of their own
+
+**Rule: an item that brings a capability also brings the preflight checks that depend on it.** There is no "finish preflight" item, and there must not be one.
+
+The reason is what happens if there were. A capability lands, its check does not, and the check sits `unavailable` until somebody works through a backlog of them — which means every intervening run is blocked by a check whose enabling capability already exists, and the pressure to relax "unavailable blocks" comes from a real inconvenience the plan created. A backlog item would also be the easiest thing in the plan to defer, and deferring it would silently widen the gap between what the Harness *can* verify and what it *does*.
+
+So the 17 unimplemented checks are distributed. Each is named against the item that makes it possible:
+
+| Item | Preflight checks it must close | Why it is that item |
+|---|---|---|
+| **3a** | `schema.types_match_semantic_types`, `schema.declared_key_present`, `volume.max_timestamp_within_freshness_window` | All three need a column to carry a semantic type. The third is not obvious: "newest record inside the freshness window" cannot run until something says *which* field is the timestamp |
+| **3b** | `packs.predicates_exist_in_registry`, `packs.semantic_types_resolve` | Both resolve a rule's references against a closed registry; neither the registry nor the §7.2 rule shape exists |
+| **7** (walking skeleton) | `connectivity.target_writable`, `volume.no_truncated_extract`, `capacity.space_for_output_and_quarantine`, `capacity.egress_allowlist_pinned`, `capacity.kill_switch_reachable` | The skeleton brings the target adapter, `ingest`, and the §6.3 publication boundary the kill switch is defined against. Five checks arrive with one item because one item finally gives the pipeline an output end |
+| **9** (`tr-core`) | `encoding.locale_matches_observed_shapes`, `schema.no_undeclared_pii_column` | Both are locale knowledge. Writing either before `tr-core` exists would put Turkish shapes in the kernel and break P3 — the shape detectors currently in `kernel/gates/guard.py` are already a known instance of that defect |
+| **17** (client access) | `connectivity.principal_is_read_only`, `connectivity.grants_match_declared_scope`, `connectivity.credential_expiry_exceeds_run`, `governance.subprocessor_register_current` | Three need a real bound credential to inspect; the fourth needs a maintained `SUBPROCESSORS.md` (§17). All four are access and legal work, which is what item 17 already is |
+| **19** (`client/tekbas`) | `packs.no_pass_through_above_client_layer`, and the vacuity below | The first engagement to declare an external reference is the first one where `license_mode` and layer placement can be checked at all (§9.6) |
+
+**Two checks pass vacuously today and will start blocking — by design, and it will look like a regression.** `packs.declared_packs_resolvable` and `governance.external_references_declare_license_mode` both pass on an empty list. The moment item 9 declares `core/tr-core@^1.4`, or item 19 declares Cardata, the vacuity ends and the check goes `unavailable` until a pack loader and a reference adapter exist.
+
+That is the correct behaviour and it is worth writing down, because the day it happens the natural reading is "preflight broke". It did not: a manifest that declares something now has something to verify. **Item 9 must therefore bring the §7.4 pack loader, and item 19 the `references/` adapter** — they are not optional extras attached to those items, they are the price of declaring a pack or a reference at all.
+
+**A source adapter is the one capability with no item.** `connectivity.source_reachable` and `encoding.collation_consistent` have database forms that need a driver-backed adapter, and no item in this plan brings one — item 18 authors a manifest for the dealership source but does not build the thing that reads it. Gate 0 is file-bound so it does not bite there. Before item 18 starts, either the adapter gets an item or the dealership extract arrives as a file; deciding that late is how a Gate 1 week disappears.
 
 ---
 
@@ -106,5 +136,6 @@ Named explicitly so they do not get absorbed by accident:
 1. **`tr-core` edge cases (item 9) can double.** Two days assumes the six normalizers behave. Turkish casing interacts badly with almost everything, and real dealer data will surface combinations nobody documents. If this item runs to four days it is not a planning failure — it is the item earning its place as the moat.
 2. **Gate 1 calendar is client-governed, not effort-governed.** Item 21 is one day of effort spread across two weeks of waiting. If the client's review takes a month, the calendar slips without a single extra person-day being spent. Do not compress the plan by assuming a fast turnaround.
 3. **Item 17 could stall entirely.** Credential provisioning, JIT setup, and DPA confirmation depend on people outside both MAXENG and this plan. Start it in week 5, in parallel with Gate 0 — it is the only item worth beginning early.
-4. **The original spec estimated Gate 0 at two weeks.** That was written before v0.4 added Bronze, write-audit-publish, two arming modes, two leak tests, and the registries. The scope roughly doubled, and the estimate here reflects the hardened spec rather than the original one. This is a correction, not a slip.
-5. **Three days a week is an assumption.** At two days a week the calendar becomes fifteen weeks. At five it becomes six — but five days a week on this means violating the three-initiative ceiling, which has its own cost elsewhere.
+4. **Item 3 was mis-scoped, and the correction is instructive.** It read as "two registries, both enum lists" and was priced at one day. One of them *is* that — the predicate registry (3b) lands close to the original estimate. The other was never a registry: binding a semantic type to a column requires an artifact that did not exist in the plan at all. `column_map` maps a source name to a canonical field name, and nothing said what a canonical field *is*, so §7.5's "rules bind to semantic types" had no chain to travel and §13's `reuse_ratio` had nothing to measure. Preflight is what surfaced it — three of its checks stopped at the same missing link. **Look for this shape elsewhere: a plan item named after the thing you can see, hiding the artifact it silently assumes.**
+5. **The original spec estimated Gate 0 at two weeks.** That was written before v0.4 added Bronze, write-audit-publish, two arming modes, two leak tests, and the registries. The scope roughly doubled, and the estimate here reflects the hardened spec rather than the original one. This is a correction, not a slip.
+6. **Three days a week is an assumption.** At two days a week the calendar becomes fifteen weeks. At five it becomes six — but five days a week on this means violating the three-initiative ceiling, which has its own cost elsewhere.

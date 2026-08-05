@@ -1,7 +1,7 @@
-# STATUS — 4 August 2026
+# STATUS — 4–5 August 2026
 
 **Reflects:** `CLAUDE.md` v0.5.4 · repo `MaxengUK/data-onboarding-harness` @ `75a0226`
-**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. `ingest`, `profile`, `normalize` and CLI wiring remain deliberately out of scope: what exists is the storage floor those stages will stand on, not the stages.
+**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. Third session (5 Aug): **item 5 framed** — the preflight framework, digest and CLI, with 12 of 29 checks live and the rest registered and blocking; item 3 re-priced and split after preflight exposed what it had been hiding. `ingest`, `profile` and `normalize` remain deliberately out of scope: what exists is the storage floor those stages will stand on, plus the gate that decides whether they may start.
 **This is a living document.** Sections are updated in place as items close, not appended to. Where a section records a decision rather than a state, it says so.
 
 ---
@@ -12,14 +12,17 @@
 |---|---|---|---|
 | 1 | Repo skeleton, Pydantic schemas, JSON Schema, CI guard | 1.5 | ✅ Closed |
 | 2 | Evidence emitter, egress allowlist, Leg 1 | 1.0 | ✅ Closed (Leg 1 at unit level; end-to-end deferred to Gate 0 close) |
-| 3 | Predicate registry + semantic type registry | 1.0 | ◐ Semantic type registry seeded in `kernel/registries.py`; **predicate registry not started** |
+| 3a | Canonical schema artifact + resolver + semantic type binding chain | 1.5 | ⬜ **Next.** Re-priced and split — see `BUILD-PLAN.md` §6.4. Semantic type registry seeded in `kernel/registries.py`; the binding chain it exists for does not exist |
+| 3b | Predicate registry + §7.2 rule schema | 0.5 | ⬜ Not started |
 | 4a | Path abstraction (`kernel/storage`) + Bronze store (`kernel/bronze`) | 1.0 | ✅ Closed. 30 tests; each control verified by breaking it |
 | 4b | Audit store (`kernel/audit`) + `AuditConfig` + shared serialiser | 1.0 | ✅ Closed. 35 tests; each control verified by breaking it |
 | — | **Run manifest** (`kernel/run_manifest`) — unplanned, see §4b.3 | 0.5 | ✅ Closed. 13 tests |
-| 5 | Preflight — all seven check categories | 2.0 | ◐ **Framework, digest, CLI and 10 of 29 checks.** All 29 registered; the other 19 block as `unavailable`. See §5a |
+| 5 | Preflight — framework, digest, CLI, and the checks today allows | 2.0 → 1.0 | ◐ **Framed: 12 of 29 checks implemented.** All 29 registered; the other 17 report `unavailable`. See §5a |
 | 6–16 | Arming, walking skeleton, tr-core, discovery, Gate 0/1 | 24 | ⬜ Not started |
 
-156 tests, all green. Three unplanned pieces have been added across the two sessions and each closed a real defect: guard hardening, the schema sync test, and now the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
+223 tests, all green. Three unplanned pieces have been added across the sessions and each closed a real defect: guard hardening, the schema sync test, and the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
+
+**Preflight changed how the plan is shaped, not just what is in it.** `BUILD-PLAN.md` §2.1 now carries a rule: an item that brings a capability also brings the preflight checks depending on it, and the 17 unimplemented checks are distributed across items 3a, 3b, 7, 9, 17 and 19 rather than collected into a "finish preflight" item. A backlog item would be the easiest thing in the plan to defer, and deferring it would leave runs blocked by checks whose enabling capability already shipped — which is where the pressure to weaken "unavailable blocks" would come from.
 
 ---
 
@@ -186,7 +189,7 @@ That somewhere was named in §12 for Bronze and named nowhere for audit, which i
 
 ## 5a. Built this session — preflight (item 5, partial by decision)
 
-`kernel/stages/preflight/` and `harness preflight`. 59 tests. **10 of §6.2.2's 29 checks are implemented**, and the other 19 are registered, `unavailable`, and blocking.
+`kernel/stages/preflight/` and `harness preflight`. 59 tests. **12 of §6.2.2's 29 checks are implemented**; the other 17 are registered and report `unavailable`. On the minimal manifest that is 11 `passed`, 1 `not_applicable`, 17 `unavailable` — two of the twelve pass vacuously, on an empty pack list and an empty reference list, and `BUILD-PLAN.md` §2.1 records that both stop passing the moment anything is declared.
 
 **A gap inventory came before any code**, and it is what set the scope. Working through the seven categories check by check produced three kinds of gap, and keeping them apart is what stopped preflight from becoming half stub with nobody able to say which half:
 
@@ -229,7 +232,7 @@ This is not a placeholder for verification arriving later. Some facts are not ob
 
 ### 5a.4 Where this build actually stands
 
-**Even the narrowest manifest cannot reach `ready`**, and a test asserts it. File source, no packs, no external references, every implemented check green — still blocked, by the 19 nothing implements. There is no flag that shortens that, which is the point.
+**Even the narrowest manifest cannot reach `ready`**, and a test asserts it. File source, no packs, no external references, every implemented check green — still blocked, by the 17 nothing implements. There is no flag that shortens that, which is the point.
 
 That is not a failure of item 5, it is item 5 reporting honestly. §6.2.4 sells preflight as the cheapest first contact with a client's data, answering "can this even be connected to, and what is missing" — a report that names its own gaps per check *is* that deliverable.
 
@@ -253,7 +256,7 @@ The alternative was to bring the predicate registry, the rule schema and the pac
 
 ### 5a.6 Not built, by decision
 
-`normalize`, retention and GC for either store, S3/Azure backends, arming (item 6), and the 19 unimplemented checks. Two smaller ones worth naming because they will be reached for: **`StoragePath` gained no members** — the source is read whole, inheriting the single-node ceiling §4a.1 already documents, and a `read_prefix(n)` is what the first remote backend or first genuinely large extract will force. And **`harness arm` now refuses loudly** rather than printing a success line; a gate that looks armed and authorises nothing is worse than an absent command.
+`normalize`, retention and GC for either store, S3/Azure backends, arming (item 6), and the 17 unimplemented checks. Two smaller ones worth naming because they will be reached for: **`StoragePath` gained no members** — the source is read whole, inheriting the single-node ceiling §4a.1 already documents, and a `read_prefix(n)` is what the first remote backend or first genuinely large extract will force. And **`harness arm` now refuses loudly** rather than printing a success line; a gate that looks armed and authorises nothing is worse than an absent command.
 
 ---
 
