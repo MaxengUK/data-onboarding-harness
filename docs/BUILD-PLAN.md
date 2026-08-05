@@ -1,6 +1,6 @@
 # BUILD PLAN — Harness v0.4.0 → Gate 1
 
-**Reflects:** `CLAUDE.md` v0.6.2 · last reviewed August 2026 · see `ROADMAP.md` and `STATUS.md`
+**Reflects:** `CLAUDE.md` v0.6.3 · last reviewed August 2026 · see `ROADMAP.md` and `STATUS.md`
 **Scope:** Gate 0 (synthetic) + Gate 1 (dealership, real data). Phase 1–3 items are out of scope by design.
 **Headline:** ~30 person-days over ~10 calendar weeks. Cash cost is negligible; the binding constraint is founder time.
 
@@ -29,7 +29,7 @@ Legend: **C** = Claude writes it (code, tests, schemas, docs) · **N** = Nazif's
 |---|---|---|---|---|---|
 | 1 | Repo skeleton, Pydantic schemas (manifest, pack, rule, evidence), CI synthetic-fixture guard | C + N review | 1.5 | 1 | Approving the canonical schema shape — it is expensive to change later |
 | 2 | Evidence emitter, egress allowlist, Leg 1 leak test | C + N review | 1.0 | 1–2 | Deciding what may leave the boundary is a commercial and legal call, not a coding one |
-| 3a | **Canonical schema artifact + narrow resolver + semantic type binding chain** | C + **N decides the schemas** | 1.5 | 2 | ✅ Built. `canonical/` ships `energy/generation_v1` and `automotive/sales_v2` as first drafts — **the field lists and the semantic type assignments still need Nazif's review**, which is the part of this estimate that has not been spent |
+| 3a | **Canonical schema artifact + narrow resolver + semantic type binding chain** | C + **N decides the schemas** | 1.5 | 2 | ✅ Built. `canonical/` ships `energy/generation_v1` and `automotive/sales_v2` as first drafts — **the field lists, the semantic type assignments and the three open questions in STATUS §5b.4 still need Nazif**, which is the part of this estimate that has not been spent. The energy entity was already renamed once (`plant_code` → `measurement_point_id`), which is the shape of correction this review is for |
 | 3b | Predicate registry (13 predicates) + §7.2 rule schema | C + N decides list | 0.5 | 2 | ✅ Built. **The predicate list and the pattern list still need Nazif's review** — which predicates exist bounds what a rule can say, and the patterns are the kernel's only executable content |
 | 4 | Bronze store — partitioning, immutability enforcement, pre-image lookup | C | 1.5 | 2–3 | Storage substrate decision (Postgres / DuckDB / object store) |
 | 5 | Preflight — framework, digest, CLI, and the checks today's capabilities allow | C + N reviews | 1.0 | 3 | ◐ **Framed: 18 of 30 checks live.** Revised down from 2.0 — severities are pinned to §6.2.2 and are *not* per-client, so the budgeted severity negotiation does not happen. What remains is reviewing the Preflight Report as a client-facing artifact |

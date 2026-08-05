@@ -1,6 +1,6 @@
 # STATUS — 4–5 August 2026
 
-**Reflects:** `CLAUDE.md` v0.6.2 · repo `MaxengUK/data-onboarding-harness` @ `b8f7d8f`
+**Reflects:** `CLAUDE.md` v0.6.3 · repo `MaxengUK/data-onboarding-harness` @ `31daa97`
 **Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. Third session (5 Aug): **item 5 framed, items 3a and 3b closed** — the preflight framework, digest and CLI, then the canonical schema artifact preflight had been stopping at. 18 of 30 checks live, the rest registered and blocking. `ingest`, `profile` and `normalize` remain deliberately out of scope: what exists is the storage floor those stages will stand on, plus the gate that decides whether they may start.
 **This is a living document.** Sections are updated in place as items close, not appended to. Where a section records a decision rather than a state, it says so.
 
@@ -12,7 +12,7 @@
 |---|---|---|---|
 | 1 | Repo skeleton, Pydantic schemas, JSON Schema, CI guard | 1.5 | ✅ Closed |
 | 2 | Evidence emitter, egress allowlist, Leg 1 | 1.0 | ✅ Closed (Leg 1 at unit level; end-to-end deferred to Gate 0 close) |
-| 3a | Canonical schema artifact + resolver + semantic type binding chain | 1.5 | ✅ Closed. 30 tests; opened 3 preflight checks and made a 4th genuinely N/A |
+| 3a | Canonical schema artifact + resolver + semantic type binding chain | 1.5 | ✅ Closed. 36 tests; opened 3 preflight checks and made a 4th genuinely N/A. Entity naming corrected in 0.6.3 — see §5b.4 |
 | 3b | Predicate registry + §7.2 rule schema | 0.5 | ✅ Closed. 31 tests; opened the last two pack checks that do not need a loader |
 | 4a | Path abstraction (`kernel/storage`) + Bronze store (`kernel/bronze`) | 1.0 | ✅ Closed. 30 tests; each control verified by breaking it |
 | 4b | Audit store (`kernel/audit`) + `AuditConfig` + shared serialiser | 1.0 | ✅ Closed. 35 tests; each control verified by breaking it |
@@ -20,7 +20,7 @@
 | 5 | Preflight — framework, digest, CLI, and the checks today allows | 2.0 → 1.0 | ◐ **Framed: 18 of 30 checks implemented.** All 30 registered; the other 12 report `unavailable`. See §5a |
 | 6–16 | Arming, walking skeleton, tr-core, discovery, Gate 0/1 | 24 | ⬜ Not started |
 
-297 tests, all green. Three unplanned pieces have been added across the sessions and each closed a real defect: guard hardening, the schema sync test, and the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
+303 tests, all green. Three unplanned pieces have been added across the sessions and each closed a real defect: guard hardening, the schema sync test, and the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
 
 **Preflight changed how the plan is shaped, not just what is in it.** `BUILD-PLAN.md` §2.1 now carries a rule: an item that brings a capability also brings the preflight checks depending on it, and the remaining unimplemented checks are distributed across items 7, 9, 17 and 19 rather than collected into a "finish preflight" item. A backlog item would be the easiest thing in the plan to defer, and deferring it would leave runs blocked by checks whose enabling capability already shipped — which is where the pressure to weaken "unavailable blocks" would come from.
 
@@ -318,6 +318,18 @@ Fixed rather than worked around in the fixture, because ISO timestamps are unavo
 The second is declaration class in the §6.2.2 sense — it confirms a signature was *named*, not that one was given. Verifying the reference resolves needs the Readiness Report generator (item 13), and §5c.1 records that gap rather than letting it look closed.
 
 **`band` and `derived_from_client_data_only` have no writable field**, and `extra="forbid"` is what makes that true rather than aspirational. Pydantic's default would have dropped a written `band` silently, so a pack author writing `band: money` over a 0.91 hold rate would have seen no error and believed it took effect — refusing beats ignoring. The band cap does real work: an uncorroborated rule at 0.9963 comes out `ambiguous`, not `money`, which is §9.4's circularity guard executing rather than being described.
+
+### 5b.4 Open — three questions the canonical schemas leave unanswered
+
+**Status: open. Owner: Nazif. Due: before the schemas are reviewed as drafts.**
+
+`CLAUDE.md` 0.6.3 settled the naming principle — entities are named by the role they play, not by the client's organisational level, because `canonical/` is not layered and one schema has to fit every client in a sector. Applying it renamed `plant_code` to `measurement_point_id`. Three things it did not settle:
+
+**1 — Where the measurement level is declared.** Whether a point is a plant, an inverter, a string or a meter is an engagement fact, and it is an input to rules rather than to identity: *generation must not exceed nameplate capacity* needs the level, *one reading per point per instant* does not. It is deliberately **not** in the key and **not** in the grain. The natural home is the manifest, since P3 puts variance there — but adding a manifest field for a rule that does not exist yet would be a field with no reader, so it is recorded rather than built.
+
+**2 — Long format is out of scope, and its key is known.** `grain.layout: wide` now says out loud what the schema always assumed. The long form is `(measurement_point_id, reading_at, measurement_type, value)` with `measurement_type` in the key — a **different artifact under a different id**, not an edit to this one, since §7.6 makes a changed shape a new id. Worth deciding before a client arrives with a tall SCADA export, which is the common shape.
+
+**3 — `automotive/sales_v2`'s entity is a placeholder.** `vehicle_sale` reads as "one sale of one vehicle", and `key: [chassis_no]` presumes one sale per vehicle — false the first time a car is resold. The real question is whether a row is a vehicle, an order line, or a delivery, and the three give different keys, different grains and different rules. The artifact and its comment say so; nothing else does.
 
 ### 5c.1 Open — the signature reference is named, not verified
 
