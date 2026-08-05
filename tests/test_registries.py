@@ -14,6 +14,7 @@ membership check are unaffected.
 
 from __future__ import annotations
 
+import inspect
 from enum import Enum
 
 import pytest
@@ -34,9 +35,26 @@ def test_a_member_cannot_be_declared_without_its_pii_flag() -> None:
     with pytest.raises(TypeError):
 
         class Incomplete(str, Enum):
-            __new__ = SemanticType.__new__
+            # `__new_member__`, not `__new__`: Enum moves a custom `__new__`
+            # there and substitutes its own value-lookup constructor, so a test
+            # written against `__new__` raises from the lookup failing and
+            # proves nothing about the declaration contract.
+            __new__ = SemanticType.__new_member__
 
             FORGOTTEN = "forgotten"
+
+
+def test_the_pii_flag_may_not_acquire_a_default() -> None:
+    """Required individually, which the test above does not establish.
+
+    A default on `is_pii` would let the next semantic type inherit non-PII
+    without anyone choosing it — and non-PII types are eligible for §8.1
+    distinct-value export.
+    """
+    parameters = inspect.signature(SemanticType.__new_member__).parameters
+
+    for name in ("value", "is_pii"):
+        assert parameters[name].default is inspect.Parameter.empty
 
 
 def test_every_type_is_classified() -> None:

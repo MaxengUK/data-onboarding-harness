@@ -71,11 +71,19 @@ def sample_params(predicate: Predicate) -> dict:
 
 
 def test_a_predicate_cannot_be_declared_without_all_three() -> None:
-    """Structural, not conventional: the class fails to build."""
+    """Structural, not conventional: the class fails to build.
+
+    Note `__new_member__`, not `__new__`. Enum moves a custom `__new__` there
+    during class creation and puts its own value-lookup constructor in its
+    place — so a version of this test written against `__new__` raises
+    `TypeError` from the lookup failing and proves nothing about the
+    declaration contract. It passed that way until the sibling test below
+    exposed it.
+    """
     with pytest.raises(TypeError):
 
         class Incomplete(str, Enum):
-            __new__ = Predicate.__new__
+            __new__ = Predicate.__new_member__
 
             FORGOTTEN = "forgotten"
 
@@ -89,7 +97,7 @@ def test_none_of_the_three_may_acquire_a_default() -> None:
     adds, which is the failure it exists to prevent. A default on any of the
     three turns a structural guarantee back into a convention.
     """
-    parameters = inspect.signature(Predicate.__new__).parameters
+    parameters = inspect.signature(Predicate.__new_member__).parameters
 
     for name in ("value", "implementation", "params", "scope"):
         assert parameters[name].default is inspect.Parameter.empty, (
