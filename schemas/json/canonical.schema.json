@@ -1,6 +1,7 @@
 {
   "$defs": {
     "CanonicalField": {
+      "additionalProperties": false,
       "description": "One field of the canonical schema.",
       "properties": {
         "name": {
@@ -51,6 +52,7 @@
       "type": "string"
     }
   },
+  "additionalProperties": false,
   "description": "A canonical schema artifact, loaded from `canonical/` (\u00a77.6).",
   "properties": {
     "id": {

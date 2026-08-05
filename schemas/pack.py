@@ -22,6 +22,8 @@ from pydantic import BaseModel, Field
 
 
 class PackRuleRef(BaseModel):
+
+    model_config = {"extra": "forbid"}
     id: str
     severity: str = "error"
 
@@ -32,6 +34,8 @@ class PackManifest(BaseModel):
     Layer, precedence and override declarations are absent, so a pack authored
     against these fields cannot be resolved by a later version.
     """
+
+    model_config = {"extra": "forbid"}
 
     name: str
     version: str

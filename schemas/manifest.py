@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class SourceBinding(BaseModel):
+
+    model_config = {"extra": "forbid"}
     kind: Literal["database", "file"]
     dialect: str | None = None
     connection_ref: str
@@ -12,6 +14,8 @@ class SourceBinding(BaseModel):
 
 
 class SourceConfig(BaseModel):
+
+    model_config = {"extra": "forbid"}
     name: str
     binding: SourceBinding
     format: str
@@ -21,6 +25,8 @@ class SourceConfig(BaseModel):
 
 
 class BronzeConfig(BaseModel):
+
+    model_config = {"extra": "forbid"}
     # `kernel.storage.resolve_location` is the resolver, named here rather than
     # in the description: a client authoring a manifest has no use for a kernel
     # import path, and a published schema that names one invites code written
@@ -67,6 +73,8 @@ class AuditConfig(BaseModel):
     partition without a stable content hash.
     """
 
+    model_config = {"extra": "forbid"}
+
     location: str = Field(
         description=(
             "A path abstraction, resolved the same way as bronze.location "
@@ -81,6 +89,8 @@ class AuditConfig(BaseModel):
 
 
 class TargetConfig(BaseModel):
+
+    model_config = {"extra": "forbid"}
     kind: str
     connection_ref: str
     canonical: str
@@ -103,6 +113,8 @@ class RowCountBounds(BaseModel):
 
     Preflight warns when the observed count falls outside it.
     """
+
+    model_config = {"extra": "forbid"}
 
     min: int = Field(ge=0)
     max: int = Field(gt=0)
@@ -131,6 +143,8 @@ class GovernanceConfig(BaseModel):
     declaration exists and does not verify that it holds.
     """
 
+    model_config = {"extra": "forbid"}
+
     dpa_ref: str = Field(
         min_length=1,
         description=(
@@ -149,12 +163,16 @@ class GovernanceConfig(BaseModel):
 
 
 class ArmingConfig(BaseModel):
+
+    model_config = {"extra": "forbid"}
     form: Literal["interactive", "standing"] = "interactive"
     idp_ref: str = "client"
     ttl_minutes: int = 60
 
 
 class PreflightConfig(BaseModel):
+
+    model_config = {"extra": "forbid"}
     sample_limit: int = Field(200, gt=0)
     freshness_window_hours: int = Field(48, gt=0)
     row_count_bounds: RowCountBounds = Field(
@@ -165,6 +183,8 @@ class PreflightConfig(BaseModel):
 
 
 class EgressConfig(BaseModel):
+
+    model_config = {"extra": "forbid"}
     evidence_only: bool = True
     k_anonymity_min: int = 5
 
@@ -189,6 +209,8 @@ class EgressConfig(BaseModel):
 
 
 class Manifest(BaseModel):
+
+    model_config = {"extra": "forbid"}
     engagement: str
     tenant: str
     sector: str

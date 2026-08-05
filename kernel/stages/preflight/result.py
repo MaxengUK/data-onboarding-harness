@@ -98,7 +98,7 @@ class CheckResult(BaseModel):
     the registration it came from.
     """
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     check_id: str
     category: Category

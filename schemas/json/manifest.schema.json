@@ -1,6 +1,7 @@
 {
   "$defs": {
     "ArmingConfig": {
+      "additionalProperties": false,
       "properties": {
         "form": {
           "default": "interactive",
@@ -26,6 +27,7 @@
       "type": "object"
     },
     "AuditConfig": {
+      "additionalProperties": false,
       "description": "Where the audit store lives and how long it is kept.\n\nA separate store beside Bronze, never inside it: audit records are produced\nafter ingest, so writing them into a Bronze partition would leave that\npartition without a stable content hash.",
       "properties": {
         "location": {
@@ -48,6 +50,7 @@
       "type": "object"
     },
     "BronzeConfig": {
+      "additionalProperties": false,
       "properties": {
         "location": {
           "description": "A location, not necessarily a local path: local filesystem, S3 and Azure Blob are equally valid, though only local paths are implemented in this build.",
@@ -80,6 +83,7 @@
       "type": "object"
     },
     "EgressConfig": {
+      "additionalProperties": false,
       "properties": {
         "evidence_only": {
           "default": true,
@@ -96,6 +100,7 @@
       "type": "object"
     },
     "GovernanceConfig": {
+      "additionalProperties": false,
       "description": "Commitments preflight requires to be present, not proven.\n\nBoth fields back declaration-class checks: preflight confirms the\ndeclaration exists and does not verify that it holds.",
       "properties": {
         "dpa_ref": {
@@ -119,6 +124,7 @@
       "type": "object"
     },
     "PreflightConfig": {
+      "additionalProperties": false,
       "properties": {
         "sample_limit": {
           "default": 200,
@@ -149,6 +155,7 @@
       "type": "object"
     },
     "RowCountBounds": {
+      "additionalProperties": false,
       "description": "The row count a run expects the bound source to fall within.\n\nPreflight warns when the observed count falls outside it.",
       "properties": {
         "min": {
@@ -170,6 +177,7 @@
       "type": "object"
     },
     "SourceBinding": {
+      "additionalProperties": false,
       "properties": {
         "kind": {
           "enum": [
@@ -222,6 +230,7 @@
       "type": "object"
     },
     "SourceConfig": {
+      "additionalProperties": false,
       "properties": {
         "name": {
           "title": "Name",
@@ -262,6 +271,7 @@
       "type": "object"
     },
     "TargetConfig": {
+      "additionalProperties": false,
       "properties": {
         "kind": {
           "title": "Kind",
@@ -301,6 +311,7 @@
       "type": "object"
     }
   },
+  "additionalProperties": false,
   "properties": {
     "engagement": {
       "title": "Engagement",

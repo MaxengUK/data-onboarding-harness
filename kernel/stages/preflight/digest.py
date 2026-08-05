@@ -52,7 +52,7 @@ class DigestComponent(str, Enum):
 class PreflightDigest(BaseModel):
     """A complete digest and the components it was computed from."""
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     value: str = Field(description="sha256 over the canonicalised components, hex")
     covers: tuple[DigestComponent, ...] = Field(

@@ -52,6 +52,8 @@ class AuditRecord(BaseModel):
     Bronze produces it.
     """
 
+    model_config = {"extra": "forbid"}
+
     #: Read by kernel.gates.egress_gate off the *class*, so it must stay a
     #: ClassVar — as a Pydantic field it would vanish from the class namespace
     #: and the gate would silently stop recognising this type. Removing it makes

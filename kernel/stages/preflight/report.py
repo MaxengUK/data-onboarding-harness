@@ -42,7 +42,7 @@ class PreflightReport(BaseModel):
     not having been built by the emitter (§8).
     """
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     results: tuple[CheckResult, ...]
     digest: PreflightDigest | None = None

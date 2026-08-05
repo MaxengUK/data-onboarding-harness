@@ -36,7 +36,7 @@ from kernel.stages.preflight.result import Category, CheckClass, Severity
 class CheckSpec(BaseModel):
     """One §6.2.2 check, declared independently of whether it can be run."""
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     check_id: str
     category: Category

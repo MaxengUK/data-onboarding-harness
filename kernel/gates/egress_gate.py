@@ -108,7 +108,13 @@ class EgressModel(BaseModel):
     is how the emitter recognises what it built. A Great Expectations result
     object, or a bare dict, is not an EgressModel and is refused on sight —
     before any question of its contents arises.
+
+    `extra="forbid"` is inherited by every evidence model. An undeclared field
+    is refused at construction as well as at the gate, so the two cannot
+    disagree about what the artifact contains.
     """
+
+    model_config = {"extra": "forbid"}
 
 
 # --- §8 constants -----------------------------------------------------------

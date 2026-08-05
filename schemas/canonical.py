@@ -30,7 +30,7 @@ from kernel.registries import SemanticType
 class CanonicalField(BaseModel):
     """One field of the canonical schema."""
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     name: str = Field(min_length=1)
     semantic_type: SemanticType = Field(
@@ -48,7 +48,7 @@ class CanonicalField(BaseModel):
 class CanonicalSchema(BaseModel):
     """A canonical schema artifact, loaded from `canonical/` (§7.6)."""
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     # Why the version lives in the id rather than in a field of its own: v2 is a
     # different schema, not a new version of this one, so evolution has to be a

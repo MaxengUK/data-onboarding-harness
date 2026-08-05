@@ -102,7 +102,7 @@ class RunManifest(BaseModel):
     it describes are not.
     """
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     run_id: str
     #: Two versions, and they are not interchangeable. Both are required and

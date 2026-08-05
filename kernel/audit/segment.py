@@ -131,7 +131,7 @@ class SegmentRef(BaseModel):
     to the run rather than to what the run wrote.
     """
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     run_id: str
     bronze_partition: str = Field(

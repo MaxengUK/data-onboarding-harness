@@ -1,4 +1,5 @@
 {
+  "additionalProperties": false,
   "description": "One attributable mutation, per P8: one rule id, one transform name.\n\nHolds the pre-image hash so a value can be verified against the Bronze\npartition that still holds it (\u00a74.2). The hash proves which value it was;\nBronze produces it.",
   "properties": {
     "row_ordinal": {

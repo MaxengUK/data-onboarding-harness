@@ -1,6 +1,7 @@
 {
   "$defs": {
     "BandCount": {
+      "additionalProperties": false,
       "description": "One entry of the `band_distribution` metric: a band and its count.",
       "properties": {
         "band": {
@@ -19,6 +20,7 @@
       "type": "object"
     },
     "ColumnProfile": {
+      "additionalProperties": false,
       "description": "\u00a79.1 layer A output for one column: statistics and shapes, no values.\n\n`distinct_values` is the \u00a78.1 exception and is populated only when all three\nof its conditions hold. When they do not, `top_shapes` is the answer.",
       "properties": {
         "column_name": {
@@ -93,6 +95,7 @@
       "type": "string"
     },
     "KAnonymisedValues": {
+      "additionalProperties": false,
       "description": "A distinct-value list, exported only when every \u00a78.1 condition holds.\n\nA non-PII semantic type, cardinality within the limit, and every group count\nat or above the run's k-anonymity minimum.",
       "properties": {
         "semantic_type": {
@@ -119,6 +122,7 @@
       "type": "object"
     },
     "Metrics": {
+      "additionalProperties": false,
       "description": "The \u00a713 metric set, as explicit fields rather than an open dict.",
       "properties": {
         "reuse_ratio": {
@@ -217,6 +221,7 @@
       "type": "object"
     },
     "RuleOutcome": {
+      "additionalProperties": false,
       "description": "What one rule did to a batch, in counts. Never which records.",
       "properties": {
         "rule_id": {
@@ -286,6 +291,7 @@
       "type": "string"
     },
     "ShapeSummary": {
+      "additionalProperties": false,
       "description": "The \u00a78.1 fallback: how many values look like this, not which they are.",
       "properties": {
         "shape": {
@@ -321,6 +327,7 @@
       "type": "string"
     },
     "ValueCount": {
+      "additionalProperties": false,
       "description": "One distinct value and its group count. Only legal inside \u00a78.1.",
       "properties": {
         "value": {
@@ -340,6 +347,7 @@
       "type": "object"
     }
   },
+  "additionalProperties": false,
   "description": "The only artifact that crosses the boundary (P5).\n\nIdentified by an opaque `run_id` and the manifest hash rather than by tenant\nor engagement name: neither is on the \u00a78 allowlist, and the recipient\nalready knows which engagement they are looking at.",
   "properties": {
     "run_id": {

@@ -62,7 +62,7 @@ class PartitionRef(BaseModel):
     segments (§12).
     """
 
-    model_config = {"frozen": True}
+    model_config = {"frozen": True, "extra": "forbid"}
 
     partition_id: str
     content_hash: str = Field(description="sha256 of the stored bytes, hex")

@@ -1,6 +1,7 @@
 {
   "$defs": {
     "PackRuleRef": {
+      "additionalProperties": false,
       "properties": {
         "id": {
           "title": "Id",
@@ -19,6 +20,7 @@
       "type": "object"
     }
   },
+  "additionalProperties": false,
   "description": "**Provisional. Not the pack schema this version of the Harness loads.**\n\nPublished so the artifact set is complete, not because anything reads it.\nLayer, precedence and override declarations are absent, so a pack authored\nagainst these fields cannot be resolved by a later version.",
   "properties": {
     "name": {
