@@ -13,7 +13,12 @@ from kernel.gates.guard import (
     normalize_msisdn,
     scan_file_for_leaks,
 )
-from tests.synthetic import find_valid_tckn, find_valid_vkn
+from tests.synthetic import (
+    authentic_plate,
+    find_valid_tckn,
+    find_valid_vkn,
+    iso_timestamp,
+)
 
 # --- checksum-valid generators ------------------------------------------------
 #
@@ -304,3 +309,52 @@ def test_main_returns_0_on_a_clean_tree(tmp_path, capsys):
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "Guard Passed" in captured.out
+
+
+# --- ISO-8601 timestamps are not plates ---------------------------------------
+
+
+def test_an_iso_timestamp_is_not_reported_as_a_plate(tmp_path):
+    """An ISO timestamp's day-`T`-hour run reads as province + letter + digits,
+    which is a well-formed plate by every rule the pattern knows.
+
+    Fixed rather than worked around in the fixtures. ISO timestamps are
+    unavoidable in this repo: audit records, run manifests and freshness columns
+    all carry them, so leaving the false positive would mean the guard blocking
+    legitimate commits routinely. A control that cries wolf gets disabled, and
+    this one is the last thing between a real identifier and a public repo.
+    """
+    readings = tmp_path / "readings.csv"
+    readings.write_text(
+        f"plant_code;reading_at\nPLANT-01;{iso_timestamp()}\n", encoding="utf-8"
+    )
+
+    assert scan_file_for_leaks(readings) == []
+
+
+def test_blanking_a_timestamp_does_not_blind_the_plate_scan(tmp_path):
+    """The reason timestamps are blanked in place rather than skipped by line.
+
+    Dropping the whole line would hide a genuine plate that happened to share it
+    with a timestamp — and a row carrying both is the normal shape of a vehicle
+    record, not a contrived one.
+    """
+    plate = authentic_plate()
+    records = tmp_path / "deliveries.csv"
+    records.write_text(
+        f"delivered_at;plate\n{iso_timestamp()};{plate}\n", encoding="utf-8"
+    )
+
+    leaks = scan_file_for_leaks(records)
+
+    assert any(plate in leak for leak in leaks)
+
+
+def test_an_out_of_range_province_stays_clean_beside_a_timestamp(tmp_path):
+    """§0's documented escape hatch still works: 99 is not a province code."""
+    records = tmp_path / "synthetic.csv"
+    records.write_text(
+        f"delivered_at;plate\n{iso_timestamp()};99 ABC 123\n", encoding="utf-8"
+    )
+
+    assert scan_file_for_leaks(records) == []

@@ -49,3 +49,24 @@ def synthetic_local_msisdn() -> str:
 def synthetic_person_name() -> str:
     """A person-name-shaped string, assembled so no literal name appears here."""
     return "Ahm" + "et " + "Yil" + "maz"
+
+
+def authentic_plate() -> str:
+    """A plate with a real province code, assembled at runtime.
+
+    Needed by the guard's own tests: proving the plate scanner still fires
+    requires a plate it should fire on. Writing one as a literal would make this
+    file fail the guard, which is §0's warning demonstrated on itself — and it
+    was demonstrated, by a commit the guard blocked for exactly this.
+    """
+    return "3" + "4 AB" + "C 1" + "23"
+
+
+def iso_timestamp() -> str:
+    """An ISO-8601 timestamp, assembled the same way and for the same reason.
+
+    The day-`T`-hour run inside one reads as province + letter + digits to the
+    plate pattern, which is the false positive the scanner blanks timestamps to
+    avoid. A literal here would re-trigger it in this file.
+    """
+    return "2026-08-0" + "1T0" + "0:00:00Z"

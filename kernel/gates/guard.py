@@ -48,6 +48,30 @@ PLATE_PATTERN = re.compile(
     r'\b(0[1-9]|[1-7][0-9]|8[0-1])[ \t\-]*[A-Z]{1,3}[ \t\-]*\d{2,4}\b'
 )
 
+#: ISO-8601 timestamps are blanked before the plate scan, because the plate
+#: pattern matches inside one. The day number, the `T` separator and the first
+#: two digits of the hour read as province code, plate letter and plate digits —
+#: a well-formed plate by every rule the pattern knows.
+#:
+#: No example is written out here, deliberately: an ISO timestamp in this file
+#: would trip the very scanner this comment explains. §0 warns about exactly
+#: that ("a literal will block the very test that needs it"), and the warning
+#: was demonstrated on this fix — the guard blocked the commit that introduced
+#: it. `tests/synthetic.iso_timestamp()` builds one at runtime instead.
+#:
+#: This is a false positive worth fixing rather than working around. ISO
+#: timestamps are unavoidable here — audit records, run manifests, freshness
+#: columns and half the fixtures carry them — so leaving it would mean the guard
+#: blocking legitimate commits routinely. A control that cries wolf gets
+#: disabled, and this one is the last thing standing between a real identifier
+#: and a public repository (§0, §5).
+#:
+#: Blanking rather than skipping the line: a line can hold both a timestamp and
+#: a genuine plate, and dropping the whole line would hide the second.
+ISO_TIMESTAMP_PATTERN = re.compile(
+    r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?'
+)
+
 
 def is_authentic_tckn(tckn: str) -> bool:
     """Geçerli bir TCKN algoritmasına uyup uymadığını kontrol eder."""
@@ -205,7 +229,12 @@ def scan_file_for_leaks(file_path: Path) -> list[str]:
 
     # Line-by-line so the plate pattern can never match across a line break.
     for line in content.splitlines():
-        for match in PLATE_PATTERN.finditer(line):
+        # Same length, so any offset the pattern reports still points at the
+        # right column of the original line.
+        without_timestamps = ISO_TIMESTAMP_PATTERN.sub(
+            lambda match: " " * len(match.group()), line
+        )
+        for match in PLATE_PATTERN.finditer(without_timestamps):
             violations.append(f"Authentic Turkish Plate detected: {match.group()}")
 
     return violations
