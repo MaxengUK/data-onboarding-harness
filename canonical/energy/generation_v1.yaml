@@ -1,0 +1,25 @@
+id: energy/generation_v1
+
+# Gate 0's target schema. Energy is §9.5 `prior` mode: rules come from physical
+# invariants (generation >= 0, efficiency <= theoretical ceiling) rather than
+# from mining, which is why the quantity is energy_quantity and not
+# currency_amount -- the rule family that attaches to it is different.
+fields:
+  - name: plant_code
+    semantic_type: opaque_key
+    required: true
+
+  - name: reading_at
+    semantic_type: date
+    required: true
+
+  - name: generation_mwh
+    semantic_type: energy_quantity
+    required: true
+
+  - name: meter_status
+    semantic_type: category
+    required: false
+
+key: [plant_code, reading_at]
+freshness_field: reading_at

@@ -49,4 +49,4 @@ harness = "kernel.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["kernel*", "discovery*", "references*", "schemas*", "packs*"]
+include = ["kernel*", "discovery*", "references*", "schemas*", "packs*", "canonical*"]

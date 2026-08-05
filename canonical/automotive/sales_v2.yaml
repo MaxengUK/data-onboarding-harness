@@ -1,0 +1,46 @@
+id: automotive/sales_v2
+
+# Gate 1's target schema, and the one CLAUDE.md §7.1's manifest example maps
+# onto. Four of these fields are the right-hand side of that example's
+# column_map, so this artifact is what makes that example resolvable at all.
+#
+# Note order_date beside delivery_date: this pair is why §7.6 requires
+# freshness_field to be declared rather than inferred from "the only date-typed
+# field". Inference would silently pick one, and the two answer different
+# questions -- an extract is fresh with respect to when orders were taken, not
+# to when cars happened to be handed over.
+fields:
+  - name: chassis_no
+    semantic_type: chassis_no
+    required: true
+
+  - name: brand
+    semantic_type: brand
+    required: true
+
+  - name: model
+    semantic_type: model
+    required: false
+
+  - name: order_date
+    semantic_type: date
+    required: true
+
+  - name: delivery_date
+    semantic_type: date
+    required: false
+
+  - name: customer_msisdn
+    semantic_type: phone_mobile
+    required: false
+
+  - name: sale_amount
+    semantic_type: currency_amount
+    required: false
+
+  - name: province_code
+    semantic_type: province_code
+    required: false
+
+key: [chassis_no]
+freshness_field: order_date
