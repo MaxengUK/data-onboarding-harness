@@ -28,13 +28,23 @@ TEXT_EXTENSIONS = {
     ".py", ".toml", ".ini", ".cfg", ".sql", ".xml", ".log",
 }
 
+# Digit classes here are `[0-9]`, never `\d`, and it is the same decision
+# `kernel/predicates.py` makes in `PatternName` — see `_is_ascii_digits` in
+# `kernel.checksums` for the argument. The consequence specific to this file:
+# the checksum validators now refuse a non-ASCII digit outright, so a pattern
+# written with `\d` would hand `is_authentic_tckn` candidates it is structurally
+# incapable of vouching for. A matcher and its validator have to see one
+# universe, or the guard's verdict is about a different string than the one it
+# matched.
+#
 # Optional national prefix (0 / 90 / 0090 / +90), itself optionally followed
 # by a separator, ahead of the 5xx mobile core (e.g. "+90 555 123 45 67").
 MSISDN_PATTERN = re.compile(
-    r'(?<!\d)(?:(?:\+90|0090|90|0)[ \t\-]?)?5\d{2}[ \t\-]?\d{3}[ \t\-]?\d{2}[ \t\-]?\d{2}(?!\d)'
+    r'(?<![0-9])(?:(?:\+90|0090|90|0)[ \t\-]?)?'
+    r'5[0-9]{2}[ \t\-]?[0-9]{3}[ \t\-]?[0-9]{2}[ \t\-]?[0-9]{2}(?![0-9])'
 )
-TCKN_PATTERN = re.compile(r'\b[1-9]\d{10}\b')
-VKN_PATTERN = re.compile(r'\b\d{10}\b')
+TCKN_PATTERN = re.compile(r'\b[1-9][0-9]{10}\b')
+VKN_PATTERN = re.compile(r'\b[0-9]{10}\b')
 # A bare 10-digit number is ~1/9 likely to pass the VKN checksum by chance, so
 # it is only evaluated where a vkn/vergi/tax_id label identifies it — either
 # nearby in the text, or naming its column. One pattern serves both so they
@@ -47,7 +57,7 @@ VKN_CONTEXT_RADIUS = 40
 DELIMITED_EXTENSIONS = {".csv", ".tsv"}
 # [ \t\-] only (no \s) so this can never span a line break.
 PLATE_PATTERN = re.compile(
-    r'\b(0[1-9]|[1-7][0-9]|8[0-1])[ \t\-]*[A-Z]{1,3}[ \t\-]*\d{2,4}\b'
+    r'\b(0[1-9]|[1-7][0-9]|8[0-1])[ \t\-]*[A-Z]{1,3}[ \t\-]*[0-9]{2,4}\b'
 )
 
 #: ISO-8601 timestamps are blanked before the plate scan, because the plate
@@ -71,7 +81,8 @@ PLATE_PATTERN = re.compile(
 #: Blanking rather than skipping the line: a line can hold both a timestamp and
 #: a genuine plate, and dropping the whole line would hide the second.
 ISO_TIMESTAMP_PATTERN = re.compile(
-    r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?'
+    r'[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}'
+    r'(:[0-9]{2}(\.[0-9]+)?)?(Z|[+-][0-9]{2}:?[0-9]{2})?'
 )
 
 #: What a blanked timestamp is replaced with, one character per character so

@@ -86,6 +86,13 @@ def is_valid_vkn(value: str) -> bool:
 
 
 def normalise_msisdn(raw: str) -> str:
-    """Strip separators and any national prefix, keeping the 10 subscriber digits."""
-    digits_only = re.sub(r"\D", "", raw)
+    """Strip separators and any national prefix, keeping the 10 subscriber digits.
+
+    `[^0-9]` rather than `\\D`, for the reason in `_is_ascii_digits`: `\\D`
+    preserves Unicode decimal digits, so a non-ASCII digit would survive into
+    what this function calls "the subscriber digits". Treating it as a separator
+    instead keeps this function's output in the same alphabet every caller
+    assumes it is in.
+    """
+    digits_only = re.sub(r"[^0-9]", "", raw)
     return digits_only[-10:] if len(digits_only) >= 10 else digits_only
