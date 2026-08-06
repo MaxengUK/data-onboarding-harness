@@ -487,6 +487,7 @@ def test_the_resolution_logic_works_without_a_loader() -> None:
             "kind": "completeness",
             "applies_to": {"semantic_type": "energy_quantity"},
             "predicate": "is_not_null",
+            "params": {"treat_blank_as_null": True},
             "provenance": {"source": "authored", "author": "maxeng"},
         }
     )

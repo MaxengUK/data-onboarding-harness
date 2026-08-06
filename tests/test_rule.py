@@ -76,7 +76,14 @@ def test_a_discovered_rule_cannot_be_promoted_by_editing_it() -> None:
     with one keystroke and no signature anywhere.
     """
     for promoted in ("confirmed", "enforced"):
-        forged = DISCOVERED | {"state": promoted, "predicate": "is_not_null"}
+        forged = DISCOVERED | {
+            "state": promoted,
+            "predicate": "is_not_null",
+            # Declared because every absence-aware predicate requires it, not
+            # because this test is about it: without it the rule fails on its
+            # params and never reaches the signature check this test names.
+            "params": {"treat_blank_as_null": True},
+        }
 
         with pytest.raises(ValidationError, match="signature_ref"):
             Rule.model_validate(forged)
