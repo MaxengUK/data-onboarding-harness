@@ -30,13 +30,32 @@ TCKN_LENGTH = 11
 VKN_LENGTH = 10
 
 
+def _is_ascii_digits(value: str) -> bool:
+    """ASCII `0`–`9` only.
+
+    `str.isdigit()` alone is not this check. It is true for Unicode decimal
+    digits — `٣٤٥`, `४५६` — and `int()` parses them, so both algorithms below
+    would run their arithmetic over a value no issuing authority produced and
+    return a confident verdict on it. That is reachable by ordinary copy-paste
+    from a web form or a PDF.
+
+    Both readers need the restriction and for the same reason. The predicate
+    (§7.5) must not accept as well-formed something that is not; the guard (§0,
+    §5) must see the same universe as the validator, or it matches shapes the
+    validator has just been taught it cannot vouch for. `kernel/predicates.py`
+    makes the matching half of this decision in `PatternName`, where digit
+    classes are `[0-9]` rather than `\\d`.
+    """
+    return value.isascii() and value.isdigit()
+
+
 def is_valid_tckn(value: str) -> bool:
     """TCKN check digits (10th and 11th), per the published algorithm.
 
     Digit 10 is `((sum of odd positions × 7) − sum of even positions) mod 10`;
     digit 11 is the sum of the first ten mod 10. A leading zero is invalid.
     """
-    if len(value) != TCKN_LENGTH or not value.isdigit() or value[0] == "0":
+    if len(value) != TCKN_LENGTH or not _is_ascii_digits(value) or value[0] == "0":
         return False
 
     digits = [int(digit) for digit in value]
@@ -50,7 +69,7 @@ def is_valid_tckn(value: str) -> bool:
 
 def is_valid_vkn(value: str) -> bool:
     """VKN check digit, per the GİB mod-9 / mod-10 algorithm."""
-    if len(value) != VKN_LENGTH or not value.isdigit():
+    if len(value) != VKN_LENGTH or not _is_ascii_digits(value):
         return False
 
     digits = [int(digit) for digit in value]

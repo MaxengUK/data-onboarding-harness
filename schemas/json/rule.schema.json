@@ -85,7 +85,8 @@
         "field_before",
         "fields_equal",
         "is_unique",
-        "cardinality_at_most"
+        "cardinality_at_most",
+        "key_is_unique"
       ],
       "title": "Predicate",
       "type": "string"
