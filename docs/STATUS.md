@@ -1,7 +1,7 @@
-# STATUS — 4–5 August 2026
+# STATUS — 4–6 August 2026
 
-**Reflects:** `CLAUDE.md` v0.6.3 · repo `MaxengUK/data-onboarding-harness` @ `31daa97`
-**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. Third session (5 Aug): **item 5 framed, items 3a and 3b closed** — the preflight framework, digest and CLI, then the canonical schema artifact preflight had been stopping at. 18 of 30 checks live, the rest registered and blocking. `ingest`, `profile` and `normalize` remain deliberately out of scope: what exists is the storage floor those stages will stand on, plus the gate that decides whether they may start.
+**Reflects:** `CLAUDE.md` v0.6.3 · repo `MaxengUK/data-onboarding-harness` @ `d8daf2f`
+**Sessions:** first build session (3 Aug) closed BUILD-PLAN items 1 and 2, item 3 partially. Second session (4 Aug): the Bronze substrate decisions in §4 were taken and written into `CLAUDE.md` 0.5.0, the repo was licensed, and **item 4 closed outright** — 4a's path abstraction and Bronze store, then 4b's audit store, plus a run manifest neither store could do without. Third session (5 Aug): **item 5 framed, items 3a and 3b closed** — the preflight framework, digest and CLI, then the canonical schema artifact preflight had been stopping at. 18 of 30 checks live, the rest registered and blocking. Fourth session (6 Aug): **a review round over 3b's predicate registry**, which found seven defects and produced the registry's first new member — see §5c.3. `ingest`, `profile` and `normalize` remain deliberately out of scope: what exists is the storage floor those stages will stand on, plus the gate that decides whether they may start.
 **This is a living document.** Sections are updated in place as items close, not appended to. Where a section records a decision rather than a state, it says so.
 
 ---
@@ -13,14 +13,14 @@
 | 1 | Repo skeleton, Pydantic schemas, JSON Schema, CI guard | 1.5 | ✅ Closed |
 | 2 | Evidence emitter, egress allowlist, Leg 1 | 1.0 | ✅ Closed (Leg 1 at unit level; end-to-end deferred to Gate 0 close) |
 | 3a | Canonical schema artifact + resolver + semantic type binding chain | 1.5 | ✅ Closed. 36 tests; opened 3 preflight checks and made a 4th genuinely N/A. Entity naming corrected in 0.6.3 — see §5b.4 |
-| 3b | Predicate registry + §7.2 rule schema | 0.5 | ✅ Closed. 31 tests; opened the last two pack checks that do not need a loader |
+| 3b | Predicate registry + §7.2 rule schema | 0.5 | ✅ Closed. 36 tests after the review round; opened the last two pack checks that do not need a loader. 14 predicates — see §5c.3 |
 | 4a | Path abstraction (`kernel/storage`) + Bronze store (`kernel/bronze`) | 1.0 | ✅ Closed. 30 tests; each control verified by breaking it |
 | 4b | Audit store (`kernel/audit`) + `AuditConfig` + shared serialiser | 1.0 | ✅ Closed. 35 tests; each control verified by breaking it |
 | — | **Run manifest** (`kernel/run_manifest`) — unplanned, see §4b.3 | 0.5 | ✅ Closed. 13 tests |
 | 5 | Preflight — framework, digest, CLI, and the checks today allows | 2.0 → 1.0 | ◐ **Framed: 18 of 30 checks implemented.** All 30 registered; the other 12 report `unavailable`. See §5a |
 | 6–16 | Arming, walking skeleton, tr-core, discovery, Gate 0/1 | 24 | ⬜ Not started |
 
-303 tests, all green. Three unplanned pieces have been added across the sessions and each closed a real defect: guard hardening, the schema sync test, and the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
+324 tests, all green. Three unplanned pieces have been added across the sessions and each closed a real defect: guard hardening, the schema sync test, and the run manifest. None was in BUILD-PLAN; all three belong in the record as scope that earned its place. The run manifest is the largest of them and the most load-bearing — §4.2.5 layer 3 was unimplementable without it, which is why it is a row here rather than a footnote.
 
 **Preflight changed how the plan is shaped, not just what is in it.** `BUILD-PLAN.md` §2.1 now carries a rule: an item that brings a capability also brings the preflight checks depending on it, and the remaining unimplemented checks are distributed across items 7, 9, 17 and 19 rather than collected into a "finish preflight" item. A backlog item would be the easiest thing in the plan to defer, and deferring it would leave runs blocked by checks whose enabling capability already shipped — which is where the pressure to weaken "unavailable blocks" would come from.
 
@@ -43,6 +43,8 @@ The session's highest-value output. Each was invisible until code forced the que
 | — | **§12 named no record for audit segment hashes.** §4.2.6 puts the audit store under §4.2.5's three layers, and layer 3 — the only one that carries weight — needs the expected hash held *outside* the store. §12's run manifest enumerated Bronze partitions and stopped there, so the control was mandated with nothing to enforce it from. | Run manifest records audit segment ids and content hashes beside Bronze's; an object it does not name is **unreadable**, not merely unrecorded. CLAUDE.md → 0.5.2 |
 
 **The pattern, now stable across ten findings:** every serious spec-level error was a *missing concept*, not a wording error — and each was found by trying to write the code, not by re-reading the document. B1 (Bronze), B5 (audit record) and the §12 omission are the same shape: a section that was internally coherent and silently depended on something no other section provided.
+
+**§5c.3 marks that pattern's boundary rather than breaking it.** The predicate review found seven defects and **not one of them was a spec defect** — every section of `CLAUDE.md` they touch was already right, and the code simply did not do what the section said. So the claim above survives intact and gains its complement: reading the spec finds nothing, writing the code finds missing concepts, and **reading the code finds silent policy**. The seven are all one shape — a decision that had to be made, made in the kernel, and not written down anywhere a rule author could see it. That shape is invisible from the spec by construction, because the spec says what must be decided and not who decided it.
 
 **The corollary, learned three times today:** a control that passes proves nothing. The guard, the schema sync test, and the pre-commit hook each only earned trust when observed to *fail* where failure was correct.
 
@@ -347,6 +349,44 @@ Found by accident: a new sibling test asserting that no parameter may acquire a 
 
 This is the third session running in which the break round found the hole in a test rather than in the code, and it sharpens the standing lesson one more turn. **Breaking a control tells you a test fails. It does not tell you the test failed for the reason its name claims** — and a test that passes for the wrong reason is worse than an absent one, because it is counted.
 
+### 5c.3 The predicate review round — seven defects, one shape
+
+A review of `kernel/predicates.py` before the list goes to Nazif. Seven findings, and the reason to keep them together is that **six of the seven are the same defect**: a decision that had to be made was made in the kernel and left invisible to the rule that depends on it. P3 puts variance in packs and manifests; a hardcoded answer is variance that has been decided and then hidden.
+
+| # | Defect | Resolution |
+|---|---|---|
+| 1 | **`$` accepts a trailing newline.** Python's `$` matches at end-of-string *or* before a trailing `\n`, and `matches_pattern` used `search`. So `"123\n"` satisfied `digits`, `"2026-08-05\n"` satisfied `iso_date`. A trailing newline in a CSV cell is the dirt the harness exists to catch, so the validator passed the thing it was pointed at | `MatchMode` declared per pattern, positionally, and `FULL` patterns carry no anchors of their own |
+| 2 | **`\d` is not ASCII.** It spans Unicode decimal digits, so `٣٤٥` satisfied `digits`. Worse one module over: `str.isdigit()` is true for them and `int()` parses them, so `is_valid_tckn` ran its arithmetic over them and returned a verdict | `[0-9]` in every kernel digit class; `_is_ascii_digits` in `kernel/checksums.py`; the guard's patterns follow (§5c.4) |
+| 3 | **`field_before` was fail-open.** A missing side passed, so `delivery_date < order_date` never fired on a row with no `order_date` — P7 inverted, on exactly the rows most likely to be wrong. `fields_equal` had it quieter: `None == None` made two absences read as agreement | `on_missing` — mandatory, no default |
+| 4 | **`is_null` carried embedded policy.** NULL, empty cell and `"   "` are three things, and whether they are equivalent is a client's call. It was also answered *twice and differently*: `is_null` treated `"   "` as absent while the row predicates tested `is None` and treated it as present | `treat_blank_as_null`, routed through one `_is_absent` helper so all seven absence-aware predicates get one answer |
+| 5 | **No composite-key predicate.** `energy/generation_v1` declares `key: [measurement_point_id, reading_at]` and `is_unique` reads one column, so nothing in the registry could evaluate the key the canonical schema declares | `Scope.FRAME` + `key_is_unique`, the registry's 14th member |
+| — | **`is_iso_date` accepted a timestamp.** `datetime.fromisoformat` widened in 3.11; the name said date and the behaviour said date-time | `date.fromisoformat`. The name was right and the behaviour moved |
+| — | **`is_numeric` accepted `nan` / `inf`.** `float()` takes all three, and then every comparison in `in_range` is False — so the rule reported a violation whose cause was in neither the value nor the bounds | Refused explicitly, in `_is_numeric` and again in `_in_range` because a float `nan` reaches the second without passing through the first |
+
+**Two design decisions, both taken against a rejected alternative.**
+
+*Anchoring is declared, not patched.* Replacing `$` with `\Z` fixes today and not tomorrow — `matches_pattern` still searches, and the next pattern written with `$` restores the bug. Switching wholesale to `fullmatch` breaks `non_blank`, which deliberately asks whether a non-space character occurs *anywhere* and cannot be written as a statement about a whole value. So the mode is a per-member declaration in the shape `Scope` already uses, and a `FULL` pattern's source carries no `^`/`$` at all: stating the anchor twice leaves `$`'s leniency sitting in a source someone will copy into a `SEARCH` pattern.
+
+*A frame is columns, not rows.* `Scope.FRAME` is handed `{field name: values}`, aligned by position — what Polars already holds, and what a two- or three-column key check actually needs. The rejected shape was a sequence of row mappings, which builds a Python dict per row to answer a question about two columns; at a million rows that is a million allocations, and it would have handed `validate` (item 10) the wrong shape from the only interface telling it what to build. The scopes now pair cleanly: `VALUE`↔`ROW`, `COLUMN`↔`FRAME`.
+
+**The alignment invariant is the one place this module raises.** Handed columns of length 1,000,000 and 999,999, `zip` stops at the shorter one and returns a clean verdict over a silently truncated frame. `FrameAlignmentError` refuses instead — and the reasoning is what keeps it consistent with "no predicate raises": the no-raise property is about *data*, because §6 gives `validate` one reaction to bad data (quarantine) and it cannot reach it from a traceback. A frame whose columns disagree about how many rows exist is not data, it is a caller that built the projection wrong. Returning `False` would attribute a harness bug to the client's data (P8); returning `True` would hide the dropped rows.
+
+**The break round: 14 controls broken, 14 caught, and one test strengthened.** For the first time in four sessions no control was found undefended — but the standing lesson still earned its keep. `test_the_declared_key_of_a_canonical_schema_can_be_evaluated` stayed **green** under an implementation that read only the first key field, because it asserted a violating frame and a violating frame collides on one column too. It now asserts the clean direction as well, over a frame where every column repeats and only the combination distinguishes the rows — which is what makes the word "composite" in its name true.
+
+### 5c.4 The guard and the validator now see one universe
+
+`kernel/gates/guard.py`'s digit classes moved to `[0-9]` in the same change, and this is a consequence of finding 2 rather than tidiness. The checksum validators now refuse a non-ASCII digit outright, so a pattern still written with `\d` would hand `is_authentic_tckn` candidates it is structurally incapable of vouching for — a matcher whose verdict is about a different string than the one it matched. `normalise_msisdn` moved with them, for the same reason in the other direction: `\D` *preserves* Unicode digits, so one could survive into what that function calls "the ten subscriber digits".
+
+A test pins the decision across both modules by reading the guard's source, because this is a property of what is written rather than of what it computes.
+
+### 5c.5 Open — `on_missing: pass` inflates `hold_rate`
+
+**Status: open. Owner: unassigned. Due: BUILD-PLAN item 12, discovery Layer A.**
+
+`MissingPolicy` ships with two values, and the second has a consequence outside the predicate. A row whose side is absent and whose policy is `pass` is counted as **evaluated and satisfied** — so it raises `hold_rate`, and `hold_rate` is what §9.2 turns into a confidence band. The `money` band is 0.99–0.999, which is narrow enough that a column with a few per cent of empty cells could be carried into it by rows nobody actually tested.
+
+The likely answer is a third value — `skip`, removing the row from the denominator rather than the numerator — which makes `hold_rate` a rate over rows the rule could genuinely be applied to. It is deliberately **not** built now: nothing computes `hold_rate` yet, discovery is item 12, and a third policy value added before its only consumer exists is a value with no reader. Recorded rather than guessed at, and the enum's docstring points here so whoever writes Layer A meets the question rather than inheriting a two-value enum that looks finished.
+
 ---
 
 ## 5. Small items flagged but not actioned
@@ -373,6 +413,7 @@ This is the third session running in which the break round found the hole in a t
 - Disk went 1.3 GB → 3.52 GB free. Adequate for now; Bronze writes real files, so watch it.
 - Always confirm `(.venv)` in the prompt before running anything. A run outside the venv produced a false green earlier in the session — the exporter crashed on import, wrote nothing, and `git diff --exit-code` therefore returned 0.
 - The agent can commit but cannot push: the SSH key is passphrase-protected and not loaded into ssh-agent, so a non-interactive subprocess cannot use it. This accident produced a useful control and is being kept deliberately — push stays a human step.
+- **`git bisect` will land on red commits that are not the defect.** This repo splits a change into `fix:` and `test:` commits, so a fix lands one commit before the tests that cover it and the suite is red in between. Known instance: **`3ff63bb` and `b2855b6` are red on their own; the drop tests arrive in `6a88111`.** Anyone bisecting into that range should read the range rather than the commit — the failures there are the old tests meeting new behaviour, not the behaviour being wrong. Recorded here rather than in the commit messages because a message naming its own hash cannot be written before the hash exists, and rewriting the two to add it would change the hashes this note points at.
 
 ---
 
